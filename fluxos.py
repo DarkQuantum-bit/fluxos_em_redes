@@ -149,11 +149,13 @@ if st.button("🚀 Resolver Otimização"):
         ax2.set_ylabel("Valor (R$)")
         st.pyplot(fig2)
 
-    # Grafo
+    # 🌐 Grafo dos Fluxos de Caixa - Melhorado
     st.markdown(f"<h3 style='color:{COR_PRINCIPAL};'>🌐 Grafo dos Fluxos de Caixa</h3>", unsafe_allow_html=True)
+
     G = nx.DiGraph()
     for s in setores:
         G.add_node(s)
+
     for _, row in df_fluxos.iterrows():
         i, j, t, f = row
         label = f"R${int(f):,} (t{t})"
@@ -163,26 +165,31 @@ if st.button("🚀 Resolver Otimização"):
         else:
             G.add_edge(i, j, labels=[label], weights=[f])
 
-    pos = {'A': (0, 0)}
-    angles = np.linspace(0, 2 * np.pi, len(setores)-1, endpoint=False)
-    raio = 3
+    pos = {}
+    raio = 5
+    pos['A'] = (0, 0)
+    angles = np.linspace(0, 2 * np.pi, len(setores) - 1, endpoint=False)
     for (setor, angle) in zip([s for s in setores if s != 'A'], angles):
         pos[setor] = (raio * np.cos(angle), raio * np.sin(angle))
-    edge_labels = { (i, j): "\n".join(G[i][j]['labels']) for i, j in G.edges() }
-    edge_widths = [sum(G[i][j]['weights'])/10000 for i, j in G.edges()]
-    node_colors = ['#FFB347' if node == 'A' else '#87CEFA' for node in G.nodes()]
 
-    fig3, ax3 = plt.subplots(figsize=(10,8))
-    nx.draw_networkx_nodes(G, pos, node_color=node_colors, node_size=2000, edgecolors='black')
-    nx.draw_networkx_labels(G, pos, font_size=14, font_weight='bold')
-    nx.draw_networkx_edges(G, pos, width=edge_widths, arrowsize=25, arrowstyle='-|>', connectionstyle='arc3,rad=0.15')
-    nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_color='darkred', font_size=10,
-                                 bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="black", lw=0.5))
-    ax3.set_title("Grafo dos Fluxos de Caixa", fontsize=14)
+    edge_labels = {(i, j): "\n".join(G[i][j]['labels']) for i, j in G.edges()}
+    edge_widths = [0.5 + sum(G[i][j]['weights']) / 50000 for i, j in G.edges()]
+    node_colors = ['#FF8C00' if node == 'A' else '#1E90FF' for node in G.nodes()]
+
+    fig3, ax3 = plt.subplots(figsize=(10, 10), facecolor="#1a1a1a")
+    ax3.set_facecolor("#1a1a1a")
+
+    nx.draw_networkx_nodes(G, pos, node_color=node_colors, node_size=2500, edgecolors='white', linewidths=1.5, ax=ax3)
+    nx.draw_networkx_labels(G, pos, font_size=16, font_weight='bold', font_color='white', ax=ax3)
+    nx.draw_networkx_edges(G, pos, width=edge_widths, arrowsize=25, arrowstyle='-|>', connectionstyle='arc3,rad=0.2', edge_color='white', alpha=0.8, ax=ax3)
+    nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_color='salmon', font_size=10,
+                                 bbox=dict(boxstyle="round,pad=0.3", fc="black", ec="white", lw=0.5, alpha=0.7), ax=ax3)
+
+    ax3.set_title("Grafo dos Fluxos de Caixa", fontsize=16, color='white', pad=20)
     ax3.axis('off')
     st.pyplot(fig3)
 
-    # Análise Final
+    # 📌 Análise Final
     st.markdown(f"<h3 style='color:{COR_PRINCIPAL};'>📌 Análise Final e Sugestões</h3>", unsafe_allow_html=True)
     texto_analise = f"""
 - Foram gerados dados aleatórios para demandas e fluxos financeiros.
