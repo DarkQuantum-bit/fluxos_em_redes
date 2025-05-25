@@ -9,8 +9,8 @@ from pulp import LpProblem, LpMinimize, LpVariable, lpSum, LpStatus, value
 st.set_page_config(page_title="MS529 - Otimização de Fluxo de Caixa", layout="wide")
 st.markdown(
     """
-    <h1 style='text-align: center; color: #4B8BBE;'>MS529 - Otimização de Fluxo de Caixa em Redes</h1>
-    <p style='text-align: center; font-size:18px;'>Simule cenários financeiros, visualize fluxos e tome melhores decisões!</p>
+    <h1 style='text-align: center; color: #4B8BBE;'>MS529 - Otimização de Fluxo de Caixa</h1>
+    <p style='text-align: center; font-size:18px;'>Simule cenários financeiros, visualize fluxos para tomar melhores decisões!</p>
     """,
     unsafe_allow_html=True
 )
@@ -35,24 +35,24 @@ if st.sidebar.button("📖 Sobre o Modelo Matemático"):
         ### 🎓 Formulação Matemática
 
         **Conjuntos:**
-        - Setores: \(N = \{A, B, C, D, E, F\}\)
-        - Períodos: \(T = \{1, 2, 3\}\)
+        - Setores: $\(N = \{A, B, C, D, E, F\}\)$
+        - Períodos: $\(T = \{1, 2, 3\}\)$
 
         **Variáveis:**
-        - \(x_{ij}^t\): fluxo de recursos de \(i\) para \(j\) no período \(t\)
-        - \(erro_k^t\): demanda não atendida no setor \(k\) e período \(t\)
+        - $\(x_{ij}^t\)$: fluxo de recursos de $\(i\)$ para $\(j\)$ no período $\(t\)$
+        - $\(erro_k^t\)$: demanda não atendida no setor $\(k\)$ e período $\(t\)$
 
         **Parâmetros:**
-        - \(cap_{ij}\): capacidade da aresta \((i,j)\)
-        - \(c_{ij}\): custo unitário de transporte
-        - \(j_{ij}\): juros
-        - \(p_{ij}\): penalidade por atraso
-        - \(M\): penalidade artificial para erros
+        - $\(cap_{ij}\)$: capacidade da aresta $\((i,j)\)$
+        - $\(c_{ij}\)$: custo unitário de transporte
+        - $\(j_{ij}\)$: juros
+        - $\(p_{ij}\)$: penalidade por atraso
+        - $\(M\)$: penalidade artificial para erros
 
         **Função Objetivo:**
-        \[
+        $\[
         Z = \sum_{i,j,t} \left[ (c_{ij} + j_{ij} + p_{ij} \cdot atraso_t) \cdot x_{ij}^t \right] + M \cdot \sum_{k,t} erro_k^t
-        \]
+        \]$
 
         **Restrições:**
         - Capacidade das arestas:  
