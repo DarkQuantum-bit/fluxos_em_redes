@@ -15,7 +15,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# 🎨 Paleta de cores
+# Paleta de cores
 COR_PRINCIPAL = "#4B8BBE"
 COR_DESTAQUE = "#306998"
 
