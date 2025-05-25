@@ -7,7 +7,7 @@ from pulp import LpProblem, LpMinimize, LpVariable, lpSum, LpStatus, value
 
 # === Configurações iniciais ===
 st.set_page_config(page_title="Otimização de Fluxo de Caixa", layout="wide")
-st.title("📊 Otimização de Fluxo de Caixa com Fluxos em Redes")
+st.title("MS529 - Otimização de Fluxo de Caixa com Fluxos em Redes")
 
 # Setores e períodos fixos
 setores = ['A', 'B', 'C', 'D', 'E', 'F']
@@ -18,7 +18,6 @@ st.sidebar.header("🎲 Gerar Dados Aleatórios")
 seed = st.sidebar.number_input("Semente Aleatória", min_value=0, value=42)
 np.random.seed(seed)
 
-# Geração de demandas aleatórias
 st.sidebar.subheader("🔸 Demandas")
 demanda_min = st.sidebar.number_input("Demanda Mínima (R$)", value=10000)
 demanda_max = st.sidebar.number_input("Demanda Máxima (R$)", value=100000)
@@ -42,7 +41,7 @@ penalidade_max = 15
 fluxos = []
 for i in setores:
     for j in setores:
-        if i != j and i == 'A':  # A só manda, para simplificar
+        if i != j and i == 'A':  # A só manda
             fluxo = (i, j, np.random.randint(cap_min, cap_max),
                      np.round(np.random.uniform(custo_min, custo_max), 2),
                      np.round(np.random.uniform(juros_min/100, juros_max/100), 4),
@@ -50,7 +49,18 @@ for i in setores:
                      np.random.randint(penalidade_min, penalidade_max+1))
             fluxos.append(fluxo)
 
-st.sidebar.success("Banco de dados aleatório gerado!")
+# === Botão para ver dados gerados ===
+if st.button("👀 Ver Dados Gerados Aleatoriamente"):
+    st.subheader("📊 Demandas por Período e Setor")
+    df_demandas = pd.DataFrame([
+        {'Período': t, 'Setor': s, 'Demanda': demandas[(t, s)]} 
+        for (t, s) in demandas
+    ])
+    st.dataframe(df_demandas)
+
+    st.subheader("📦 Fluxos Permitidos (Arestas)")
+    df_fluxos_aleatorios = pd.DataFrame(fluxos, columns=["De", "Para", "Capacidade", "Custo", "Juros", "Prazo", "Penalidade"])
+    st.dataframe(df_fluxos_aleatorios)
 
 # === Resolver o Problema ===
 if st.button("🔍 Resolver Otimização"):
@@ -110,9 +120,28 @@ if st.button("🔍 Resolver Otimização"):
     st.write("### ⚠️ Demandas Não Atendidas (Erros)")
     st.dataframe(df_erros)
 
-    # === Grafo ===
-    st.write("### 🌐 Grafo dos Fluxos de Caixa")
+    # Gráficos de Análise
+    st.subheader("📊 Análises Gráficas dos Resultados")
 
+    # Gráfico 1: Fluxo Total por Período
+    fluxo_por_periodo = df_fluxos.groupby("Período")["Fluxo"].sum()
+    fig1, ax1 = plt.subplots()
+    fluxo_por_periodo.plot(kind="bar", color="skyblue", ax=ax1)
+    ax1.set_title("Fluxo Total por Período")
+    ax1.set_ylabel("Valor (R$)")
+    st.pyplot(fig1)
+
+    # Gráfico 2: Erros por Setor (caso ocorra)
+    if not df_erros.empty:
+        erros_por_setor = df_erros.groupby("Setor")["Erro"].sum()
+        fig2, ax2 = plt.subplots()
+        erros_por_setor.plot(kind="bar", color="salmon", ax=ax2)
+        ax2.set_title("Demandas Não Atendidas por Setor")
+        ax2.set_ylabel("Valor (R$)")
+        st.pyplot(fig2)
+
+    # Grafo
+    st.subheader("🌐 Grafo dos Fluxos de Caixa")
     G = nx.DiGraph()
     for s in setores:
         G.add_node(s)
@@ -125,23 +154,38 @@ if st.button("🔍 Resolver Otimização"):
         else:
             G.add_edge(i, j, labels=[label], weights=[f])
 
-    # Layout Pentagrama
     pos = {'A': (0, 0)}
     angles = np.linspace(0, 2 * np.pi, len(setores)-1, endpoint=False)
     raio = 3
     for (setor, angle) in zip([s for s in setores if s != 'A'], angles):
         pos[setor] = (raio * np.cos(angle), raio * np.sin(angle))
-
     edge_labels = { (i, j): "\n".join(G[i][j]['labels']) for i, j in G.edges() }
     edge_widths = [sum(G[i][j]['weights'])/10000 for i, j in G.edges()]
     node_colors = ['#ff9999' if node == 'A' else '#99ccff' for node in G.nodes()]
 
-    fig, ax = plt.subplots(figsize=(10,8))
+    fig3, ax3 = plt.subplots(figsize=(10,8))
     nx.draw_networkx_nodes(G, pos, node_color=node_colors, node_size=2000, edgecolors='black')
     nx.draw_networkx_labels(G, pos, font_size=14, font_weight='bold')
     nx.draw_networkx_edges(G, pos, width=edge_widths, arrowsize=25, arrowstyle='-|>', connectionstyle='arc3,rad=0.15')
     nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_color='darkred', font_size=10,
                                  bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="black", lw=0.5))
-    ax.set_title("🔗 Grafo dos Fluxos de Caixa (Layout Pentagrama)", fontsize=16)
-    ax.axis('off')
-    st.pyplot(fig)
+    ax3.set_title("🔗 Grafo dos Fluxos de Caixa (Layout Pentagrama)", fontsize=16)
+    ax3.axis('off')
+    st.pyplot(fig3)
+
+    # Análise final
+    st.subheader("📌 Análise Final e Sugestões")
+    texto_analise = f"""
+- Foram gerados dados aleatórios para demandas e fluxos financeiros.
+- A otimização encontrou uma solução **{LpStatus[prob.status]}** com custo total de **R$ {value(prob.objective):,.2f}**.
+"""
+    if not df_erros.empty:
+        texto_analise += f"- Atenção: Existem **{len(df_erros)} casos de demandas não atendidas**, indicando possíveis gargalos.\n"
+        texto_analise += "- 💡 Sugestões:\n"
+        texto_analise += "  - Aumente as capacidades dos fluxos.\n"
+        texto_analise += "  - Reduza as demandas excessivas.\n"
+        texto_analise += "  - Avalie prazos e penalidades.\n"
+    else:
+        texto_analise += "- 🎉 Todas as demandas foram atendidas com sucesso.\n"
+
+    st.markdown(texto_analise)
