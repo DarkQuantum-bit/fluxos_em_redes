@@ -14,7 +14,7 @@ setores = ['A', 'B', 'C', 'D', 'E', 'F']
 periodos = [1, 2, 3]
 
 # === Gerar Database Aleatória ===
-st.sidebar.header("🎲 Gerar Dados Aleatórios")
+st.sidebar.header("Gerar Dados Aleatórios")
 seed = st.sidebar.number_input("Semente Aleatória", min_value=0, value=42)
 np.random.seed(seed)
 
@@ -50,15 +50,15 @@ for i in setores:
             fluxos.append(fluxo)
 
 # === Botão para ver dados gerados ===
-if st.button("👀 Ver Dados Gerados Aleatoriamente"):
-    st.subheader("📊 Demandas por Período e Setor")
+if st.button("Ver Dados Gerados Aleatoriamente"):
+    st.subheader("Demandas por Período e Setor")
     df_demandas = pd.DataFrame([
         {'Período': t, 'Setor': s, 'Demanda': demandas[(t, s)]} 
         for (t, s) in demandas
     ])
     st.dataframe(df_demandas)
 
-    st.subheader("📦 Fluxos Permitidos (Arestas)")
+    st.subheader("Fluxos Permitidos (Arestas)")
     df_fluxos_aleatorios = pd.DataFrame(fluxos, columns=["De", "Para", "Capacidade", "Custo", "Juros", "Prazo", "Penalidade"])
     st.dataframe(df_fluxos_aleatorios)
 
@@ -91,7 +91,7 @@ if st.button("🔍 Resolver Otimização"):
 
     prob.solve()
 
-    st.subheader("✅ Resultados da Otimização")
+    st.subheader("Resultados da Otimização")
     st.write(f"**Status:** {LpStatus[prob.status]}")
     st.write(f"**Custo Total:** R$ {value(prob.objective):,.2f}")
 
@@ -114,14 +114,14 @@ if st.button("🔍 Resolver Otimização"):
     df_fluxos = pd.DataFrame(fluxos_resultado, columns=["De", "Para", "Período", "Fluxo"])
     df_erros = pd.DataFrame(erros_resultado, columns=["Setor", "Período", "Erro"])
 
-    st.write("### 📦 Fluxos Encontrados")
+    st.write("### Fluxos Encontrados")
     st.dataframe(df_fluxos)
 
-    st.write("### ⚠️ Demandas Não Atendidas (Erros)")
+    st.write("### Demandas Não Atendidas (Erros)")
     st.dataframe(df_erros)
 
     # Gráficos de Análise
-    st.subheader("📊 Análises Gráficas dos Resultados")
+    st.subheader("Análises Gráficas dos Resultados")
 
     # Gráfico 1: Fluxo Total por Período
     fluxo_por_periodo = df_fluxos.groupby("Período")["Fluxo"].sum()
@@ -141,7 +141,7 @@ if st.button("🔍 Resolver Otimização"):
         st.pyplot(fig2)
 
     # Grafo
-    st.subheader("🌐 Grafo dos Fluxos de Caixa")
+    st.subheader("Grafo dos Fluxos de Caixa")
     G = nx.DiGraph()
     for s in setores:
         G.add_node(s)
@@ -169,7 +169,7 @@ if st.button("🔍 Resolver Otimização"):
     nx.draw_networkx_edges(G, pos, width=edge_widths, arrowsize=25, arrowstyle='-|>', connectionstyle='arc3,rad=0.15')
     nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_color='darkred', font_size=10,
                                  bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="black", lw=0.5))
-    ax3.set_title("🔗 Grafo dos Fluxos de Caixa (Layout Pentagrama)", fontsize=16)
+    ax3.set_title("Grafo dos Fluxos de Caixa", fontsize=16)
     ax3.axis('off')
     st.pyplot(fig3)
 
@@ -181,11 +181,11 @@ if st.button("🔍 Resolver Otimização"):
 """
     if not df_erros.empty:
         texto_analise += f"- Atenção: Existem **{len(df_erros)} casos de demandas não atendidas**, indicando possíveis gargalos.\n"
-        texto_analise += "- 💡 Sugestões:\n"
+        texto_analise += "- Sugestões:\n"
         texto_analise += "  - Aumente as capacidades dos fluxos.\n"
         texto_analise += "  - Reduza as demandas excessivas.\n"
         texto_analise += "  - Avalie prazos e penalidades.\n"
     else:
-        texto_analise += "- 🎉 Todas as demandas foram atendidas com sucesso.\n"
+        texto_analise += "- Todas as demandas foram atendidas com sucesso.\n"
 
     st.markdown(texto_analise)
