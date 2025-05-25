@@ -19,64 +19,6 @@ st.markdown(
 COR_PRINCIPAL = "#4B8BBE"
 COR_DESTAQUE = "#306998"
 
-# === Página Teórica ===
-if st.sidebar.button("📖 Sobre o Modelo Matemático"):
-    st.markdown("---")
-    st.markdown(f"<h2 style='color:{COR_PRINCIPAL};'>📖 Modelo Matemático e Contexto</h2>", unsafe_allow_html=True)
-
-    st.markdown(
-        r"""
-        ### 🌐 Contexto do Problema
-
-        Este projeto modela o fluxo de caixa de uma empresa como um **problema de fluxos em redes**, onde os setores são nós e os fluxos de recursos são as arestas.  
-        Cada setor (A, B, C, D, E, F) possui demandas ou ofertas financeiras em diferentes períodos.  
-        O objetivo é alocar os recursos financeiros de maneira eficiente, minimizando os custos e penalidades associadas a juros e atrasos.
-
-        ### 🎓 Formulação Matemática
-
-        **Conjuntos:**
-        - Setores: $\(N = \{A, B, C, D, E, F\}\)$
-        - Períodos: $\(T = \{1, 2, 3\}\)$
-
-        **Variáveis:**
-        - $\(x_{ij}^t\)$: fluxo de recursos de $\(i\)$ para $\(j\)$ no período $\(t\)$
-        - $\(erro_k^t\)$: demanda não atendida no setor $\(k\)$ e período $\(t\)$
-
-        **Parâmetros:**
-        - $\(cap_{ij}\)$: capacidade da aresta $\((i,j)\)$
-        - $\(c_{ij}\)$: custo unitário de transporte
-        - $\(j_{ij}\)$: juros
-        - $\(p_{ij}\)$: penalidade por atraso
-        - $\(M\)$: penalidade artificial para erros
-
-        **Função Objetivo:**
-        $\[
-        Z = \sum_{i,j,t} \left[ (c_{ij} + j_{ij} + p_{ij} \cdot atraso_t) \cdot x_{ij}^t \right] + M \cdot \sum_{k,t} erro_k^t
-        \]$
-
-        **Restrições:**
-        - Capacidade das arestas:  
-        \[
-        x_{ij}^t \leq cap_{ij}
-        \]
-        - Balanço de fluxo (conservação de massa):  
-        \[
-        \sum_{i} x_{ik}^t - \sum_{j} x_{kj}^t + erro_k^t = demanda_k^t
-        \]
-
-        ### 💡 Interpretação
-
-        O modelo busca minimizar os custos financeiros, considerando:
-        - Custos unitários de transporte
-        - Juros e penalidades por atraso
-        - Penalizações para demandas não atendidas (via variável \(erro\))
-
-        A solução encontrada será o **ótimo global** do modelo, mesmo que existam demandas não atendidas — o solver prioriza a minimização do custo total.
-        """,
-        unsafe_allow_html=True
-    )
-    st.stop()
-
 # === Parâmetros do Modelo ===
 setores = ['A', 'B', 'C', 'D', 'E', 'F']
 periodos = [1, 2, 3]
