@@ -35,6 +35,7 @@ demandas = {(t, s): (np.random.randint(demanda_min, demanda_max) if s != 'A' els
             for t in periodos for s in setores}
 
 st.sidebar.subheader("🔸 Parâmetros dos Fluxos")
+M = st.sidebar.number_input("Valor de M (Penalização de Erros)", value=10.0)
 cap_min = st.sidebar.number_input("Capacidade Mínima (R$)", value=30000)
 cap_max = st.sidebar.number_input("Capacidade Máxima (R$)", value=120000)
 custo_min = st.sidebar.number_input("Custo Unitário Mínimo", value=1.0)
@@ -45,6 +46,7 @@ prazo_min = 1
 prazo_max = 3
 penalidade_min = 3
 penalidade_max = 15
+
 
 fluxos = []
 for i in setores:
@@ -83,7 +85,6 @@ if st.button("🚀 Resolver Otimização"):
         x = LpVariable.dicts("x", ((i, j, t) for (i, j, _, _, _, _, _) in fluxos for t in periodos), lowBound=0)
         # Variáveis de erro para demanda relaxada
         erro = LpVariable.dicts("erro", ((k, t) for k in setores for t in periodos), lowBound=0)
-        M = 1e1  # Penalidade alta para erro
 
         # Função objetivo: custo do fluxo + juros + penalidade de atraso + penalização de erro
         custo_total = []
