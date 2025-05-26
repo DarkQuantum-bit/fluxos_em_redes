@@ -24,7 +24,7 @@ setores = ['A', 'B', 'C', 'D', 'E', 'F']
 periodos = [1, 2, 3]
 
 st.sidebar.header("⚙️ Parâmetros de Simulação")
-seed = st.sidebar.number_input("🔹 Semente Aleatória", min_value=0, value=42)
+seed = st.sidebar.number_input("🔹 Seed Aleatória", min_value=0, value=42)
 np.random.seed(seed)
 
 st.sidebar.subheader("🔸 Demandas")
@@ -49,7 +49,7 @@ penalidade_max = 15
 fluxos = []
 for i in setores:
     for j in setores:
-        if i != j and i == 'A':
+        if i != j:
             fluxo = (i, j, np.random.randint(cap_min, cap_max),
                      np.round(np.random.uniform(custo_min, custo_max), 2),
                      np.round(np.random.uniform(juros_min/100, juros_max/100), 4),
