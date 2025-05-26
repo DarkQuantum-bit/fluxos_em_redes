@@ -78,28 +78,41 @@ if st.button("🚀 Resolver Otimização"):
     with st.spinner("⏳ Resolvendo o problema..."):
 
         prob = LpProblem("Fluxo_Caixa_Com_Relaxacao", LpMinimize)
-        x = LpVariable.dicts("x", ((i, j, t) for (i, j, _, _, _, _, _) in fluxos for t in periodos), lowBound=0)
-        erro = LpVariable.dicts("erro", ((k, t) for k in setores for t in periodos), lowBound=0)
-        M = 1000
 
+        # Variáveis de fluxo por arco e período
+        x = LpVariable.dicts("x", ((i, j, t) for (i, j, _, _, _, _, _) in fluxos for t in periodos), lowBound=0)
+        # Variáveis de erro para demanda relaxada
+        erro = LpVariable.dicts("erro", ((k, t) for k in setores for t in periodos), lowBound=0)
+        M = 1e6  # Penalidade alta para erro
+
+        # Função objetivo: custo do fluxo + juros + penalidade de atraso + penalização de erro
         custo_total = []
         for (i, j, cap, custo, juros, prazo, penalidade) in fluxos:
             for t in periodos:
                 atraso = max(0, t - prazo)
-                custo_total.append(custo * x[i, j, t] + juros * x[i, j, t] + penalidade * atraso * x[i, j, t])
+                fluxo_var = x[i, j, t]
+                custo_fluxo = custo * fluxo_var
+                custo_juros = juros * fluxo_var
+                custo_penalidade = penalidade * atraso * fluxo_var
+                custo_total.append(custo_fluxo + custo_juros + custo_penalidade)
+
         penalidade_erro = lpSum(M * erro[k, t] for k in setores for t in periodos)
         prob += lpSum(custo_total) + penalidade_erro
 
+        # Restrição: capacidade máxima do fluxo por arco e período
         for (i, j, cap, _, _, _, _) in fluxos:
             for t in periodos:
                 prob += x[i, j, t] <= cap
 
+        # Restrição: balanço de fluxo com erro (relaxação da demanda)
         for t in periodos:
             for k in setores:
-                entradas = lpSum(x[i, k, t] for (i, j, _, _, _, _, _) in fluxos if j == k and (i, j, t) in x)
-                saidas = lpSum(x[k, j, t] for (i, j, _, _, _, _, _) in fluxos if i == k and (i, j, t) in x)
-                prob += (entradas - saidas + erro[k, t]) == demandas.get((t, k), 0)
+                entradas = lpSum(x[i, k, t] for (i, j, _, _, _, _, _) in fluxos if j == k)
+                saidas = lpSum(x[k, j, t] for (i, j, _, _, _, _, _) in fluxos if i == k)
+                # entradas - saidas + erro == demanda
+                prob += entradas - saidas + erro[k, t] == demandas.get((t, k), 0)
 
+        # Resolver o problema
         prob.solve()
 
     st.markdown(f"<h3 style='color:{COR_PRINCIPAL};'>✅ Resultados da Otimização</h3>", unsafe_allow_html=True)
