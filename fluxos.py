@@ -83,7 +83,7 @@ if st.button("🚀 Resolver Otimização"):
         x = LpVariable.dicts("x", ((i, j, t) for (i, j, _, _, _, _, _) in fluxos for t in periodos), lowBound=0)
         # Variáveis de erro para demanda relaxada
         erro = LpVariable.dicts("erro", ((k, t) for k in setores for t in periodos), lowBound=0)
-        M = 1e6  # Penalidade alta para erro
+        M = 1e3  # Penalidade alta para erro
 
         # Função objetivo: custo do fluxo + juros + penalidade de atraso + penalização de erro
         custo_total = []
