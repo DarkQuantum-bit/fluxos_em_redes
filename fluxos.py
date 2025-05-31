@@ -48,15 +48,16 @@ for i in setores:
             fluxos.append(fluxo)
 
 st.markdown("---")
-if st.button("📊 Ver Dados Aleatórios Gerados"):
-    df_demandas = pd.DataFrame([
-        {'Período': t, 'Setor': s, 'Demanda': demandas[(t, s)]} 
-        for (t, s) in demandas
-    ])
-    st.dataframe(df_demandas)
+df_demandas = pd.DataFrame([
+    {'Período': t, 'Setor': s, 'Demanda': demandas[(t, s)]} 
+    for (t, s) in demandas
+])
+st.markdown("### 📊 Demandas por Período e Setor")
+st.dataframe(df_demandas)
 
-    df_fluxos_aleatorios = pd.DataFrame(fluxos, columns=["De", "Para", "Capacidade", "Custo", "Juros"])
-    st.dataframe(df_fluxos_aleatorios)
+df_fluxos_aleatorios = pd.DataFrame(fluxos, columns=["De", "Para", "Capacidade", "Custo", "Juros"])
+st.markdown("### 📦 Fluxos Permitidos (Arestas)")
+st.dataframe(df_fluxos_aleatorios)
 
 st.markdown("---")
 
@@ -65,8 +66,8 @@ if st.button("🚀 Resolver Otimização"):
         prob = LpProblem("Fluxo_Caixa_Setorial", LpMinimize)
         x = LpVariable.dicts("x", ((i, j, t) for (i, j, _, _, _) in fluxos for t in periodos), lowBound=0)
         saldo = LpVariable.dicts("saldo", ((s, t) for s in setores for t in periodos), lowBound=0)
-        erro = LpVariable.dicts("erro", ((s, t) for s in setores for t in periodos), lowBound=0)
 
+        # Remover variáveis de erro e garantir atendimento total da demanda
         custo_total = []
         for (i, j, cap, custo, juros) in fluxos:
             for t in periodos:
@@ -74,8 +75,7 @@ if st.button("🚀 Resolver Otimização"):
                 custo_juros = juros * x[i, j, t]
                 custo_total.append(custo_fluxo + custo_juros)
 
-        penalidade_erro = lpSum(M * erro[s, t] for s in setores for t in periodos)
-        prob += lpSum(custo_total) + penalidade_erro
+        prob += lpSum(custo_total)
 
         for (i, j, cap, _, _) in fluxos:
             for t in periodos:
@@ -89,14 +89,13 @@ if st.button("🚀 Resolver Otimização"):
                     saldo_prev = 0
                 else:
                     saldo_prev = saldo[s, t-1]
-                prob += entradas - saidas + saldo_prev + erro[s, t] == demandas.get((t, s), 0) + saldo[s, t]
+                prob += entradas - saidas + saldo_prev == demandas.get((t, s), 0) + saldo[s, t]
 
         prob.solve()
 
     st.success(f"Status: {LpStatus[prob.status]} | Custo Total: R$ {value(prob.objective):,.2f}")
 
     fluxos_resultado = []
-    erros_resultado = []
     for v in prob.variables():
         if "x_" in v.name and v.varValue > 0:
             partes = v.name.split("_")
@@ -104,27 +103,20 @@ if st.button("🚀 Resolver Otimização"):
             para = partes[2].strip("(),' ")
             t = int(partes[3].strip("(),' "))
             fluxos_resultado.append([de, para, t, v.varValue])
-        if "erro_" in v.name and v.varValue > 0:
-            partes = v.name.split("_")
-            setor = partes[1].strip("(),' ")
-            t = int(partes[2].strip("(),' "))
-            erros_resultado.append([setor, t, v.varValue])
 
     df_fluxos = pd.DataFrame(fluxos_resultado, columns=["De", "Para", "Período", "Fluxo"])
-    df_erros = pd.DataFrame(erros_resultado, columns=["Setor", "Período", "Erro"])
-
     st.dataframe(df_fluxos)
-    st.dataframe(df_erros)
 
-    st.markdown(f"""<h3 style='color:{COR_PRINCIPAL};'>🌐 Grafo de Fluxos Encontrados (Formato Pentagrama)</h3>""", unsafe_allow_html=True)
+    st.markdown(f"""<h3 style='color:{COR_PRINCIPAL};'>🌐 Grafo de Fluxos Encontrados (Por Período)</h3>""", unsafe_allow_html=True)
     G = nx.DiGraph()
     for s in setores:
         G.add_node(s)
 
-    for _, row in df_fluxos.iterrows():
-        i, j, t, f = row
-        label = f"R${int(f):,} (t{t})"
-        G.add_edge(i, j, label=label, weight=f)
+    for (i, j, t, f) in df_fluxos.values:
+        if G.has_edge(i, j):
+            G[i][j]['label'] += f"\nR${int(f):,} (t{t})"
+        else:
+            G.add_edge(i, j, label=f"R${int(f):,} (t{t})", weight=f)
 
     pos = {'A': (0, 0)}
     for idx, s in enumerate(['B', 'C', 'D', 'E', 'F']):
