@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import networkx as nx
 import matplotlib.pyplot as plt
+import math
 from pulp import LpProblem, LpMinimize, LpVariable, lpSum, LpStatus, value
 
 # === Configurações Iniciais ===
@@ -115,7 +116,7 @@ if st.button("🚀 Resolver Otimização"):
     st.dataframe(df_fluxos)
     st.dataframe(df_erros)
 
-    st.markdown(f"""<h3 style='color:{COR_PRINCIPAL};'>🌐 Grafo de Fluxos Encontrados</h3>""", unsafe_allow_html=True)
+    st.markdown(f"""<h3 style='color:{COR_PRINCIPAL};'>🌐 Grafo de Fluxos Encontrados (Formato Pentagrama)</h3>""", unsafe_allow_html=True)
     G = nx.DiGraph()
     for s in setores:
         G.add_node(s)
@@ -125,15 +126,13 @@ if st.button("🚀 Resolver Otimização"):
         label = f"R${int(f):,} (t{t})"
         G.add_edge(i, j, label=label, weight=f)
 
-    pos = nx.spring_layout(G, seed=42)
+    pos = {'A': (0, 0)}
+    for idx, s in enumerate(['B', 'C', 'D', 'E', 'F']):
+        angle = 2 * math.pi * idx / 5
+        pos[s] = (5 * np.cos(angle), 5 * np.sin(angle))
+
     edge_labels = {(i, j): G[i][j]['label'] for i, j in G.edges()}
     fig, ax = plt.subplots(figsize=(10, 8))
     nx.draw(G, pos, with_labels=True, node_color="#4B8BBE", node_size=1500, font_color="white", font_weight="bold", edge_color="#ccc", arrowsize=20)
     nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_color="black", font_size=9)
     st.pyplot(fig)
-
-    st.markdown(f"""<h3 style='color:{COR_PRINCIPAL};'>📝 Narrativa do Fluxo de Caixa</h3>""", unsafe_allow_html=True)
-    texto_narrativo = """
-    O setor A atua como fonte inicial de recursos, distribuindo fluxos para os demais setores (B a F) de acordo com as demandas e restrições de capacidade. A cada período, os saldos remanescentes são transportados para o próximo período, permitindo uma gestão eficiente do caixa. As demandas de cada setor foram atendidas parcialmente ou com erros, conforme necessário, minimizando o custo total. As penalidades aplicadas refletem a priorização de fluxos essenciais, enquanto os custos e juros foram considerados para reduzir os impactos financeiros. Este modelo permite uma compreensão visual e quantitativa das transferências financeiras entre os setores e períodos, apoiando decisões estratégicas baseadas em otimização matemática.
-    """
-    st.markdown(texto_narrativo)
