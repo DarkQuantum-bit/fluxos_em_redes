@@ -62,69 +62,90 @@ st.dataframe(df_fluxos_aleatorios)
 st.markdown("---")
 
 if st.button("🚀 Resolver Otimização"):
-    with st.spinner("⏳ Resolvendo o problema..."):
-        prob = LpProblem("Fluxo_Caixa_Setorial", LpMinimize)
-        x = LpVariable.dicts("x", ((i, j, t) for (i, j, _, _, _) in fluxos for t in periodos), lowBound=0)
-        saldo = LpVariable.dicts("saldo", ((s, t) for s in setores for t in periodos), lowBound=0)
+    for modo in ["Sem Relaxamento", "Com Relaxamento"]:
+        st.markdown(f"## 🔍 Resultado: {modo}")
+        with st.spinner(f"⏳ Resolvendo o problema ({modo})..."):
+            prob = LpProblem(f"Fluxo_Caixa_{modo}", LpMinimize)
+            x = LpVariable.dicts("x", ((i, j, t) for (i, j, _, _, _) in fluxos for t in periodos), lowBound=0)
+            saldo = LpVariable.dicts("saldo", ((s, t) for s in setores for t in periodos), lowBound=0)
+            if modo == "Com Relaxamento":
+                erro = LpVariable.dicts("erro", ((s, t) for s in setores for t in periodos), lowBound=0)
+            else:
+                erro = {(s, t): 0 for s in setores for t in periodos}  # dummy
 
-        # Remover variáveis de erro e garantir atendimento total da demanda
-        custo_total = []
-        for (i, j, cap, custo, juros) in fluxos:
-            for t in periodos:
-                custo_fluxo = custo * x[i, j, t]
-                custo_juros = juros * x[i, j, t]
-                custo_total.append(custo_fluxo + custo_juros)
+            custo_total = []
+            for (i, j, cap, custo, juros) in fluxos:
+                for t in periodos:
+                    custo_fluxo = custo * x[i, j, t]
+                    custo_juros = juros * x[i, j, t]
+                    custo_total.append(custo_fluxo + custo_juros)
+            if modo == "Com Relaxamento":
+                penalidade_erro = lpSum(M * erro[s, t] for s in setores for t in periodos)
+                prob += lpSum(custo_total) + penalidade_erro
+            else:
+                prob += lpSum(custo_total)
 
-        prob += lpSum(custo_total)
+            for (i, j, cap, _, _) in fluxos:
+                for t in periodos:
+                    prob += x[i, j, t] <= cap
 
-        for (i, j, cap, _, _) in fluxos:
-            for t in periodos:
-                prob += x[i, j, t] <= cap
+            for s in setores:
+                for t in periodos:
+                    entradas = lpSum(x[i, s, t] for (i, j, _, _, _) in fluxos if j == s)
+                    saidas = lpSum(x[s, j, t] for (i, j, _, _, _) in fluxos if i == s)
+                    if t == 1:
+                        saldo_prev = 0
+                    else:
+                        saldo_prev = saldo[s, t-1]
+                    if modo == "Com Relaxamento":
+                        prob += entradas - saidas + saldo_prev + erro[s, t] == demandas.get((t, s), 0) + saldo[s, t]
+                    else:
+                        prob += entradas - saidas + saldo_prev == demandas.get((t, s), 0) + saldo[s, t]
 
+            prob.solve()
+
+        st.success(f"Status: {LpStatus[prob.status]} | Custo Total: R$ {value(prob.objective):,.2f}")
+
+        fluxos_resultado = []
+        erros_resultado = []
+        for v in prob.variables():
+            if "x_" in v.name and v.varValue > 0:
+                partes = v.name.split("_")
+                de = partes[1].strip("(),' ")
+                para = partes[2].strip("(),' ")
+                t = int(partes[3].strip("(),' "))
+                fluxos_resultado.append([de, para, t, v.varValue])
+            if "erro_" in v.name and v.varValue > 0:
+                partes = v.name.split("_")
+                setor = partes[1].strip("(),' ")
+                t = int(partes[2].strip("(),' "))
+                erros_resultado.append([setor, t, v.varValue])
+
+        df_fluxos = pd.DataFrame(fluxos_resultado, columns=["De", "Para", "Período", "Fluxo"])
+        st.dataframe(df_fluxos)
+
+        if erros_resultado:
+            df_erros = pd.DataFrame(erros_resultado, columns=["Setor", "Período", "Erro"])
+            st.markdown("### ⚠️ Demandas Não Atendidas (Somente Com Relaxamento)")
+            st.dataframe(df_erros)
+
+        st.markdown(f"<h3 style='color:{COR_PRINCIPAL};'>🌐 Grafo de Fluxos ({modo})</h3>", unsafe_allow_html=True)
+        G = nx.DiGraph()
         for s in setores:
-            for t in periodos:
-                entradas = lpSum(x[i, s, t] for (i, j, _, _, _) in fluxos if j == s)
-                saidas = lpSum(x[s, j, t] for (i, j, _, _, _) in fluxos if i == s)
-                if t == 1:
-                    saldo_prev = 0
-                else:
-                    saldo_prev = saldo[s, t-1]
-                prob += entradas - saidas + saldo_prev == demandas.get((t, s), 0) + saldo[s, t]
+            G.add_node(s)
+        for (i, j, t, f) in df_fluxos.values:
+            if G.has_edge(i, j):
+                G[i][j]['label'] += f"\nR${int(f):,} (t{t})"
+            else:
+                G.add_edge(i, j, label=f"R${int(f):,} (t{t})", weight=f)
 
-        prob.solve()
+        pos = {'A': (0, 0)}
+        for idx, s in enumerate(['B', 'C', 'D', 'E', 'F']):
+            angle = 2 * math.pi * idx / 5
+            pos[s] = (5 * np.cos(angle), 5 * np.sin(angle))
 
-    st.success(f"Status: {LpStatus[prob.status]} | Custo Total: R$ {value(prob.objective):,.2f}")
-
-    fluxos_resultado = []
-    for v in prob.variables():
-        if "x_" in v.name and v.varValue > 0:
-            partes = v.name.split("_")
-            de = partes[1].strip("(),' ")
-            para = partes[2].strip("(),' ")
-            t = int(partes[3].strip("(),' "))
-            fluxos_resultado.append([de, para, t, v.varValue])
-
-    df_fluxos = pd.DataFrame(fluxos_resultado, columns=["De", "Para", "Período", "Fluxo"])
-    st.dataframe(df_fluxos)
-
-    st.markdown(f"""<h3 style='color:{COR_PRINCIPAL};'>🌐 Grafo de Fluxos Encontrados (Por Período)</h3>""", unsafe_allow_html=True)
-    G = nx.DiGraph()
-    for s in setores:
-        G.add_node(s)
-
-    for (i, j, t, f) in df_fluxos.values:
-        if G.has_edge(i, j):
-            G[i][j]['label'] += f"\nR${int(f):,} (t{t})"
-        else:
-            G.add_edge(i, j, label=f"R${int(f):,} (t{t})", weight=f)
-
-    pos = {'A': (0, 0)}
-    for idx, s in enumerate(['B', 'C', 'D', 'E', 'F']):
-        angle = 2 * math.pi * idx / 5
-        pos[s] = (5 * np.cos(angle), 5 * np.sin(angle))
-
-    edge_labels = {(i, j): G[i][j]['label'] for i, j in G.edges()}
-    fig, ax = plt.subplots(figsize=(10, 8))
-    nx.draw(G, pos, with_labels=True, node_color="#4B8BBE", node_size=1500, font_color="white", font_weight="bold", edge_color="#ccc", arrowsize=20)
-    nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_color="black", font_size=9)
-    st.pyplot(fig)
+        edge_labels = {(i, j): G[i][j]['label'] for i, j in G.edges()}
+        fig, ax = plt.subplots(figsize=(10, 8))
+        nx.draw(G, pos, with_labels=True, node_color="#4B8BBE", node_size=1500, font_color="white", font_weight="bold", edge_color="#ccc", arrowsize=20)
+        nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_color="black", font_size=9)
+        st.pyplot(fig)
