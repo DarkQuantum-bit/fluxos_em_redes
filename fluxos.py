@@ -17,7 +17,7 @@ COR_PRINCIPAL = "#4B8BBE"
 
 setores = ['A', 'B', 'C', 'D', 'E', 'F']
 periodos = [1, 2, 3]
-st.sidebar.header("⚙️ Modo de Dados")
+
 if 'modo_dados' not in st.session_state:
     st.session_state.modo_dados = "Gerar Aleatoriamente"
 
