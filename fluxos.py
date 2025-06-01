@@ -13,7 +13,7 @@ st.markdown("""
     <p style='text-align: center; font-size:18px;'>Simule cenários financeiros, visualize fluxos para tomar melhores decisões!</p>
 """, unsafe_allow_html=True)
 
-COR_PRINCIPAL = "#4B8BBE"
+COR_PRINCIPAL = "#007adb"
 
 setores = ['A', 'B', 'C', 'D', 'E', 'F']
 periodos = [1, 2, 3]
