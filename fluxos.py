@@ -24,6 +24,7 @@ np.random.seed(seed)
 
 st.sidebar.subheader("🔸 Demandas e Fluxos")
 demanda_total = st.sidebar.number_input("Demanda Total por Período (R$)", value=400000)
+disponibilidade_A = st.sidebar.number_input("Disponibilidade de Caixa no Setor A (R$)", value=500000)
 
 st.sidebar.subheader("🔸 Parâmetros dos Fluxos")
 cap_min = st.sidebar.number_input("Capacidade Mínima Outros Fluxos (R$)", value=30000)
@@ -40,7 +41,7 @@ demandas = {}
 for t in periodos:
     for idx, s in enumerate([x for x in setores if x != 'A']):
         demandas[(t, s)] = int(demanda_total * proporcoes[idx])
-    demandas[(t, 'A')] = -sum(demandas[(t, s)] for s in setores if s != 'A')
+    demandas[(t, 'A')] = -disponibilidade_A
 
 fluxos = []
 for i in setores:
