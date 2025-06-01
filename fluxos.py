@@ -22,38 +22,30 @@ st.sidebar.header("⚙️ Parâmetros de Simulação")
 seed = st.sidebar.number_input("🔹 Seed Aleatória", min_value=0, value=42)
 np.random.seed(seed)
 
-st.sidebar.subheader("🔸 Demandas e Fluxos")
-demanda_total = st.sidebar.number_input("Demanda Total por Período (R$)", value=400000)
-disponibilidade_A = st.sidebar.number_input("Disponibilidade de Caixa no Setor A (R$)", value=500000)
+st.sidebar.subheader("🔸 Demandas")
+demanda_min = st.sidebar.number_input("Demanda Mínima (R$)", value=10000)
+demanda_max = st.sidebar.number_input("Demanda Máxima (R$)", value=100000)
+
+demandas = {(t, s): (np.random.randint(demanda_min, demanda_max) if s != 'A' else -np.random.randint(demanda_min, demanda_max))
+            for t in periodos for s in setores}
 
 st.sidebar.subheader("🔸 Parâmetros dos Fluxos")
-cap_min = st.sidebar.number_input("Capacidade Mínima Outros Fluxos (R$)", value=30000)
-cap_max = st.sidebar.number_input("Capacidade Máxima Outros Fluxos (R$)", value=120000)
+cap_min = st.sidebar.number_input("Capacidade Mínima (R$)", value=30000)
+cap_max = st.sidebar.number_input("Capacidade Máxima (R$)", value=120000)
 custo_min = st.sidebar.number_input("Custo Unitário Mínimo", value=1.0)
 custo_max = st.sidebar.number_input("Custo Unitário Máximo", value=3.0)
 juros_min = st.sidebar.number_input("Juros Mínimo (%)", value=1.0)
 juros_max = st.sidebar.number_input("Juros Máximo (%)", value=5.0)
 M = st.sidebar.number_input("Penalização por Erro (M)", value=10.0)
 
-# === Geração de Dados Balanceados ===
-proporcoes = np.random.dirichlet(np.ones(len(setores) - 1), 1).flatten()
-demandas = {}
-for t in periodos:
-    for idx, s in enumerate([x for x in setores if x != 'A']):
-        demandas[(t, s)] = int(demanda_total * proporcoes[idx])
-    demandas[(t, 'A')] = -disponibilidade_A
-
 fluxos = []
 for i in setores:
     for j in setores:
         if i != j:
-            if i == 'A' and j != 'A':
-                cap = int(max(demandas[(1, j)] * 1.2, np.random.randint(cap_min, cap_max)))
-            else:
-                cap = np.random.randint(cap_min, cap_max)
-            custo = np.round(np.random.uniform(custo_min, custo_max), 2)
-            juros = np.round(np.random.uniform(juros_min / 100, juros_max / 100), 4)
-            fluxos.append((i, j, cap, custo, juros))
+            fluxo = (i, j, np.random.randint(cap_min, cap_max),
+                     np.round(np.random.uniform(custo_min, custo_max), 2),
+                     np.round(np.random.uniform(juros_min/100, juros_max/100), 4))
+            fluxos.append(fluxo)
 
 st.markdown("---")
 df_demandas = pd.DataFrame([
