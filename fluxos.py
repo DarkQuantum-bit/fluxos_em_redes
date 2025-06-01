@@ -15,7 +15,6 @@ st.markdown("""
 
 COR_PRINCIPAL = "#4B8BBE"
 
-# === Parâmetros ===
 setores = ['A', 'B', 'C', 'D', 'E', 'F']
 periodos = [1, 2, 3]
 st.sidebar.header("⚙️ Modo de Dados")
@@ -27,6 +26,9 @@ if st.sidebar.button("🔄 Alternar Modo de Dados"):
 
 modo_dados = st.session_state.modo_dados
 st.sidebar.write(f"📝 Modo Atual: **{modo_dados}**")
+
+demandas = {}
+fluxos = []
 
 if modo_dados == "Gerar Aleatoriamente":
     seed = st.sidebar.number_input("🔹 Seed Aleatória", min_value=0, value=42)
@@ -44,41 +46,38 @@ if modo_dados == "Gerar Aleatoriamente":
     juros_max = st.sidebar.number_input("Juros Máximo (%)", value=5.0)
 
     proporcoes = np.random.dirichlet(np.ones(len(setores) - 1), 1).flatten()
-    demandas = {}
     for t in periodos:
         for idx, s in enumerate([x for x in setores if x != 'A']):
             demandas[(t, s)] = int(demanda_total * proporcoes[idx])
         demandas[(t, 'A')] = -sum(demandas[(t, s)] for s in setores if s != 'A')
 
-    fluxos = []
     for i in setores:
         for j in setores:
             if i != j:
-                if i == 'A' and j != 'A':
-                    cap = int(max(demanda_total * 0.3, np.random.randint(cap_min, cap_max)))
-                else:
-                    cap = np.random.randint(cap_min, cap_max)
+                cap = np.random.randint(cap_min, cap_max)
                 custo = np.round(np.random.uniform(custo_min, custo_max), 2)
                 juros = np.round(np.random.uniform(juros_min / 100, juros_max / 100), 4)
                 fluxos.append((i, j, cap, custo, juros))
 else:
     st.sidebar.markdown("### 📊 Insira os Dados Manualmente")
-    st.markdown("### 📊 Inserir Tabela de Demandas")
-    df_demandas = st.experimental_data_editor(pd.DataFrame(
-        [(t, s, 0) for t in periodos for s in setores],
-        columns=["Período", "Setor", "Demanda"]
-    ), num_rows="dynamic", use_container_width=True)
+    st.markdown("### 📊 Inserir Demandas por Período e Setor")
+    for t in periodos:
+        st.markdown(f"#### Período {t}")
+        for s in setores:
+            demandas[(t, s)] = st.number_input(f"Demanda para Setor {s} (Período {t})", value=0)
 
-    st.markdown("### 📦 Inserir Tabela de Fluxos")
-    df_fluxos_aleatorios = st.experimental_data_editor(pd.DataFrame(
-        [(i, j, 50000, 2.0, 0.03) for i in setores for j in setores if i != j],
-        columns=["De", "Para", "Capacidade", "Custo", "Juros"]
-    ), num_rows="dynamic", use_container_width=True)
-
-    demandas = {(row['Período'], row['Setor']): row['Demanda'] for _, row in df_demandas.iterrows()}
-    fluxos = [tuple(row) for _, row in df_fluxos_aleatorios.iterrows()]
+    st.markdown("### 📦 Inserir Fluxos Permitidos (Arestas)")
+    for i in setores:
+        for j in setores:
+            if i != j:
+                with st.expander(f"Fluxo de {i} para {j}"):
+                    cap = st.number_input(f"Capacidade de {i} para {j}", value=50000)
+                    custo = st.number_input(f"Custo unitário de {i} para {j}", value=2.0)
+                    juros = st.number_input(f"Juros (%) de {i} para {j}", value=3.0) / 100
+                    fluxos.append((i, j, cap, custo, juros))
 
 st.markdown("---")
+
 st.markdown("### 📊 Demandas por Período e Setor")
 st.dataframe(pd.DataFrame([
     {'Período': t, 'Setor': s, 'Demanda': demandas[(t, s)]} 
@@ -123,10 +122,7 @@ if st.button("🚀 Resolver Otimização"):
                 for t in periodos:
                     entradas = lpSum(x[i, s, t] for (i, j, _, _, _) in fluxos if j == s)
                     saidas = lpSum(x[s, j, t] for (i, j, _, _, _) in fluxos if i == s)
-                    if t == 1:
-                        saldo_prev = 0
-                    else:
-                        saldo_prev = saldo[s, t-1]
+                    saldo_prev = 0 if t == 1 else saldo[s, t-1]
                     if modo == "Com Relaxamento":
                         prob += entradas - saidas + saldo_prev + erro[s, t] == demandas.get((t, s), 0) + saldo[s, t]
                     else:
