@@ -59,7 +59,6 @@ if modo_dados == "Gerar Aleatoriamente":
                 juros = np.round(np.random.uniform(juros_min / 100, juros_max / 100), 4)
                 fluxos.append((i, j, cap, custo, juros))
 else:
-    st.sidebar.markdown("### 📊 Insira os Dados Manualmente")
     st.markdown("### 📊 Inserir Demandas por Período e Setor")
     for t in periodos:
         st.markdown(f"#### Período {t}")
