@@ -18,8 +18,15 @@ COR_PRINCIPAL = "#4B8BBE"
 # === Parâmetros ===
 setores = ['A', 'B', 'C', 'D', 'E', 'F']
 periodos = [1, 2, 3]
-st.sidebar.header("⚙️ Configuração dos Dados")
-modo_dados = st.sidebar.radio("Modo de Dados:", ["Inserir Manualmente", "Gerar Aleatoriamente"])
+st.sidebar.header("⚙️ Modo de Dados")
+if 'modo_dados' not in st.session_state:
+    st.session_state.modo_dados = "Gerar Aleatoriamente"
+
+if st.sidebar.button("🔄 Alternar Modo de Dados"):
+    st.session_state.modo_dados = "Inserir Manualmente" if st.session_state.modo_dados == "Gerar Aleatoriamente" else "Gerar Aleatoriamente"
+
+modo_dados = st.session_state.modo_dados
+st.sidebar.write(f"📝 Modo Atual: **{modo_dados}**")
 
 if modo_dados == "Gerar Aleatoriamente":
     seed = st.sidebar.number_input("🔹 Seed Aleatória", min_value=0, value=42)
@@ -55,7 +62,7 @@ if modo_dados == "Gerar Aleatoriamente":
                 juros = np.round(np.random.uniform(juros_min / 100, juros_max / 100), 4)
                 fluxos.append((i, j, cap, custo, juros))
 else:
-    st.sidebar.markdown("### Insira os Dados Manualmente")
+    st.sidebar.markdown("### 📊 Insira os Dados Manualmente")
     st.markdown("### 📊 Inserir Tabela de Demandas")
     df_demandas = st.experimental_data_editor(pd.DataFrame(
         [(t, s, 0) for t in periodos for s in setores],
