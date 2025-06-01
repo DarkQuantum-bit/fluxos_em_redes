@@ -19,31 +19,31 @@ setores = ['A', 'B', 'C', 'D', 'E', 'F']
 periodos = [1, 2, 3]
 
 if 'modo_dados' not in st.session_state:
-    st.session_state.modo_dados = "Gerar Aleatoriamente"
+    st.session_state.modo_dados = "Gerar aleatoriamente"
 
-if st.sidebar.button("🔄 Alternar Modo de Dados"):
-    st.session_state.modo_dados = "Inserir Manualmente" if st.session_state.modo_dados == "Gerar Aleatoriamente" else "Gerar Aleatoriamente"
+if st.sidebar.button("🔄 Alternar modo de dados"):
+    st.session_state.modo_dados = "Inserir manualmente" if st.session_state.modo_dados == "Gerar aleatoriamente" else "Gerar aleatoriamente"
 
 modo_dados = st.session_state.modo_dados
-st.sidebar.write(f"📝 Modo Atual: **{modo_dados}**")
+st.sidebar.write(f"📝 Modo atual: **{modo_dados}**")
 
 demandas = {}
 fluxos = []
 
-if modo_dados == "Gerar Aleatoriamente":
-    seed = st.sidebar.number_input("🔹 Seed Aleatória", min_value=0, value=42)
+if modo_dados == "Gerar aleatoriamente":
+    seed = st.sidebar.number_input("🔹 Seed aleatória", min_value=0, value=42)
     np.random.seed(seed)
 
-    st.sidebar.subheader("🔸 Demandas Aleatórias")
-    demanda_total = st.sidebar.number_input("Demanda Total por Período (R$)", value=400000)
+    st.sidebar.subheader("🔸 Demandas aleatórias")
+    demanda_total = st.sidebar.number_input("Demanda total por período (R$)", value=400000)
 
-    st.sidebar.subheader("🔸 Parâmetros dos Fluxos Aleatórios")
-    cap_min = st.sidebar.number_input("Capacidade Mínima (R$)", value=30000)
-    cap_max = st.sidebar.number_input("Capacidade Máxima (R$)", value=120000)
-    custo_min = st.sidebar.number_input("Custo Unitário Mínimo", value=1.0)
-    custo_max = st.sidebar.number_input("Custo Unitário Máximo", value=3.0)
-    juros_min = st.sidebar.number_input("Juros Mínimo (%)", value=1.0)
-    juros_max = st.sidebar.number_input("Juros Máximo (%)", value=5.0)
+    st.sidebar.subheader("🔸 Parâmetros dos fluxos aleatórios")
+    cap_min = st.sidebar.number_input("Capacidade mínima (R$)", value=30000)
+    cap_max = st.sidebar.number_input("Capacidade máxima (R$)", value=120000)
+    custo_min = st.sidebar.number_input("Custo unitário mínimo", value=1.0)
+    custo_max = st.sidebar.number_input("Custo unitário máximo", value=3.0)
+    juros_min = st.sidebar.number_input("Juros mínimo (%)", value=1.0)
+    juros_max = st.sidebar.number_input("Juros máximo (%)", value=5.0)
 
     proporcoes = np.random.dirichlet(np.ones(len(setores) - 1), 1).flatten()
     for t in periodos:
@@ -59,13 +59,13 @@ if modo_dados == "Gerar Aleatoriamente":
                 juros = np.round(np.random.uniform(juros_min / 100, juros_max / 100), 4)
                 fluxos.append((i, j, cap, custo, juros))
 else:
-    st.markdown("### 📊 Inserir Demandas por Período e Setor")
+    st.markdown("### 📊 Inserir demandas por período e setor")
     for t in periodos:
         st.markdown(f"#### Período {t}")
         for s in setores:
-            demandas[(t, s)] = st.number_input(f"Demanda para Setor {s} (Período {t})", value=0)
+            demandas[(t, s)] = st.number_input(f"Demanda para setor {s} (Período {t})", value=0)
 
-    st.markdown("### 📦 Inserir Fluxos Permitidos (Arestas)")
+    st.markdown("### 📦 Inserir fluxos permitidos (Arestas)")
     for i in setores:
         for j in setores:
             if i != j:
@@ -77,26 +77,26 @@ else:
 
 st.markdown("---")
 
-st.markdown("### 📊 Demandas por Período e Setor")
+st.markdown("### 📊 Demandas por período e setor")
 st.dataframe(pd.DataFrame([
     {'Período': t, 'Setor': s, 'Demanda': demandas[(t, s)]} 
     for (t, s) in demandas
 ]))
 
-st.markdown("### 📦 Fluxos Permitidos (Arestas)")
+st.markdown("### 📦 Fluxos permitidos (Arestas)")
 st.dataframe(pd.DataFrame(fluxos, columns=["De", "Para", "Capacidade", "Custo", "Juros"]))
 
 st.markdown("---")
 
-if st.button("🚀 Resolver Otimização"):
-    M = st.sidebar.number_input("Penalização por Erro (M)", value=10.0)
-    for modo in ["Sem Relaxamento", "Com Relaxamento"]:
+if st.button("🚀 Otimizar"):
+    M = st.sidebar.number_input("Penalização por erro (M)", value=10.0)
+    for modo in ["Sem relaxamento", "Com relaxamento"]:
         st.markdown(f"## 🔍 Resultado: {modo}")
         with st.spinner(f"⏳ Resolvendo o problema ({modo})..."):
             prob = LpProblem(f"Fluxo_Caixa_{modo}", LpMinimize)
             x = LpVariable.dicts("x", ((i, j, t) for (i, j, _, _, _) in fluxos for t in periodos), lowBound=0)
             saldo = LpVariable.dicts("saldo", ((s, t) for s in setores for t in periodos), lowBound=0)
-            if modo == "Com Relaxamento":
+            if modo == "Com relaxamento":
                 erro = LpVariable.dicts("erro", ((s, t) for s in setores for t in periodos), lowBound=0)
             else:
                 erro = {(s, t): 0 for s in setores for t in periodos}  # dummy
@@ -107,7 +107,7 @@ if st.button("🚀 Resolver Otimização"):
                     custo_fluxo = custo * x[i, j, t]
                     custo_juros = juros * x[i, j, t]
                     custo_total.append(custo_fluxo + custo_juros)
-            if modo == "Com Relaxamento":
+            if modo == "Com relaxamento":
                 penalidade_erro = lpSum(M * erro[s, t] for s in setores for t in periodos)
                 prob += lpSum(custo_total) + penalidade_erro
             else:
@@ -122,7 +122,7 @@ if st.button("🚀 Resolver Otimização"):
                     entradas = lpSum(x[i, s, t] for (i, j, _, _, _) in fluxos if j == s)
                     saidas = lpSum(x[s, j, t] for (i, j, _, _, _) in fluxos if i == s)
                     saldo_prev = 0 if t == 1 else saldo[s, t-1]
-                    if modo == "Com Relaxamento":
+                    if modo == "Com relaxamento":
                         prob += entradas - saidas + saldo_prev + erro[s, t] == demandas.get((t, s), 0) + saldo[s, t]
                     else:
                         prob += entradas - saidas + saldo_prev == demandas.get((t, s), 0) + saldo[s, t]
@@ -151,10 +151,10 @@ if st.button("🚀 Resolver Otimização"):
 
         if erros_resultado:
             df_erros = pd.DataFrame(erros_resultado, columns=["Setor", "Período", "Erro"])
-            st.markdown("### ⚠️ Demandas Não Atendidas (Somente Com Relaxamento)")
+            st.markdown("### ⚠️ Demandas não atendidas")
             st.dataframe(df_erros)
 
-        st.markdown(f"<h3 style='color:{COR_PRINCIPAL};'>🌐 Grafo de Fluxos ({modo})</h3>", unsafe_allow_html=True)
+        st.markdown(f"<h3 style='color:{COR_PRINCIPAL};'>🌐 Grafo ({modo})</h3>", unsafe_allow_html=True)
         G = nx.DiGraph()
         for s in setores:
             G.add_node(s)
