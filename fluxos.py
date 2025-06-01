@@ -91,7 +91,7 @@ st.markdown("---")
 if st.button("🚀 Otimizar"):
     M = st.sidebar.number_input("Penalização por erro (M)", value=10.0)
     for modo in ["Sem relaxamento", "Com relaxamento"]:
-        st.markdown(f"## 🔍 Resultado: {modo}")
+        st.markdown(f"## 🔍 {modo}")
         with st.spinner(f"⏳ Resolvendo o problema ({modo})..."):
             prob = LpProblem(f"Fluxo_Caixa_{modo}", LpMinimize)
             x = LpVariable.dicts("x", ((i, j, t) for (i, j, _, _, _) in fluxos for t in periodos), lowBound=0)
