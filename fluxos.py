@@ -18,50 +18,73 @@ COR_PRINCIPAL = "#4B8BBE"
 # === Parâmetros ===
 setores = ['A', 'B', 'C', 'D', 'E', 'F']
 periodos = [1, 2, 3]
-st.sidebar.header("⚙️ Parâmetros de Simulação")
-seed = st.sidebar.number_input("🔹 Seed Aleatória", min_value=0, value=42)
-np.random.seed(seed)
+st.sidebar.header("⚙️ Configuração dos Dados")
+modo_dados = st.sidebar.radio("Modo de Dados:", ["Inserir Manualmente", "Gerar Aleatoriamente"])
 
-st.sidebar.subheader("🔸 Demandas")
-demanda_min = st.sidebar.number_input("Demanda Mínima (R$)", value=10000)
-demanda_max = st.sidebar.number_input("Demanda Máxima (R$)", value=100000)
+if modo_dados == "Gerar Aleatoriamente":
+    seed = st.sidebar.number_input("🔹 Seed Aleatória", min_value=0, value=42)
+    np.random.seed(seed)
 
-demandas = {(t, s): (np.random.randint(demanda_min, demanda_max) if s != 'A' else -np.random.randint(demanda_min, demanda_max))
-            for t in periodos for s in setores}
+    st.sidebar.subheader("🔸 Demandas Aleatórias")
+    demanda_total = st.sidebar.number_input("Demanda Total por Período (R$)", value=400000)
 
-st.sidebar.subheader("🔸 Parâmetros dos Fluxos")
-cap_min = st.sidebar.number_input("Capacidade Mínima (R$)", value=30000)
-cap_max = st.sidebar.number_input("Capacidade Máxima (R$)", value=120000)
-custo_min = st.sidebar.number_input("Custo Unitário Mínimo", value=1.0)
-custo_max = st.sidebar.number_input("Custo Unitário Máximo", value=3.0)
-juros_min = st.sidebar.number_input("Juros Mínimo (%)", value=1.0)
-juros_max = st.sidebar.number_input("Juros Máximo (%)", value=5.0)
-M = st.sidebar.number_input("Penalização por Erro (M)", value=10.0)
+    st.sidebar.subheader("🔸 Parâmetros dos Fluxos Aleatórios")
+    cap_min = st.sidebar.number_input("Capacidade Mínima (R$)", value=30000)
+    cap_max = st.sidebar.number_input("Capacidade Máxima (R$)", value=120000)
+    custo_min = st.sidebar.number_input("Custo Unitário Mínimo", value=1.0)
+    custo_max = st.sidebar.number_input("Custo Unitário Máximo", value=3.0)
+    juros_min = st.sidebar.number_input("Juros Mínimo (%)", value=1.0)
+    juros_max = st.sidebar.number_input("Juros Máximo (%)", value=5.0)
 
-fluxos = []
-for i in setores:
-    for j in setores:
-        if i != j:
-            fluxo = (i, j, np.random.randint(cap_min, cap_max),
-                     np.round(np.random.uniform(custo_min, custo_max), 2),
-                     np.round(np.random.uniform(juros_min/100, juros_max/100), 4))
-            fluxos.append(fluxo)
+    proporcoes = np.random.dirichlet(np.ones(len(setores) - 1), 1).flatten()
+    demandas = {}
+    for t in periodos:
+        for idx, s in enumerate([x for x in setores if x != 'A']):
+            demandas[(t, s)] = int(demanda_total * proporcoes[idx])
+        demandas[(t, 'A')] = -sum(demandas[(t, s)] for s in setores if s != 'A')
+
+    fluxos = []
+    for i in setores:
+        for j in setores:
+            if i != j:
+                if i == 'A' and j != 'A':
+                    cap = int(max(demanda_total * 0.3, np.random.randint(cap_min, cap_max)))
+                else:
+                    cap = np.random.randint(cap_min, cap_max)
+                custo = np.round(np.random.uniform(custo_min, custo_max), 2)
+                juros = np.round(np.random.uniform(juros_min / 100, juros_max / 100), 4)
+                fluxos.append((i, j, cap, custo, juros))
+else:
+    st.sidebar.markdown("### Insira os Dados Manualmente")
+    st.markdown("### 📊 Inserir Tabela de Demandas")
+    df_demandas = st.experimental_data_editor(pd.DataFrame(
+        [(t, s, 0) for t in periodos for s in setores],
+        columns=["Período", "Setor", "Demanda"]
+    ), num_rows="dynamic", use_container_width=True)
+
+    st.markdown("### 📦 Inserir Tabela de Fluxos")
+    df_fluxos_aleatorios = st.experimental_data_editor(pd.DataFrame(
+        [(i, j, 50000, 2.0, 0.03) for i in setores for j in setores if i != j],
+        columns=["De", "Para", "Capacidade", "Custo", "Juros"]
+    ), num_rows="dynamic", use_container_width=True)
+
+    demandas = {(row['Período'], row['Setor']): row['Demanda'] for _, row in df_demandas.iterrows()}
+    fluxos = [tuple(row) for _, row in df_fluxos_aleatorios.iterrows()]
 
 st.markdown("---")
-df_demandas = pd.DataFrame([
+st.markdown("### 📊 Demandas por Período e Setor")
+st.dataframe(pd.DataFrame([
     {'Período': t, 'Setor': s, 'Demanda': demandas[(t, s)]} 
     for (t, s) in demandas
-])
-st.markdown("### 📊 Demandas por Período e Setor")
-st.dataframe(df_demandas)
+]))
 
-df_fluxos_aleatorios = pd.DataFrame(fluxos, columns=["De", "Para", "Capacidade", "Custo", "Juros"])
 st.markdown("### 📦 Fluxos Permitidos (Arestas)")
-st.dataframe(df_fluxos_aleatorios)
+st.dataframe(pd.DataFrame(fluxos, columns=["De", "Para", "Capacidade", "Custo", "Juros"]))
 
 st.markdown("---")
 
 if st.button("🚀 Resolver Otimização"):
+    M = st.sidebar.number_input("Penalização por Erro (M)", value=10.0)
     for modo in ["Sem Relaxamento", "Com Relaxamento"]:
         st.markdown(f"## 🔍 Resultado: {modo}")
         with st.spinner(f"⏳ Resolvendo o problema ({modo})..."):
