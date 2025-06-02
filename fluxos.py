@@ -45,8 +45,8 @@ if modo_dados == "Gerar aleatoriamente":
     juros_min = st.sidebar.number_input("Juros mínimo (%)", value=1.0)
     juros_max = st.sidebar.number_input("Juros máximo (%)", value=5.0)
 
-    proporcoes = np.random.dirichlet(np.ones(len(setores) - 1), 1).flatten()
     for t in periodos:
+        proporcoes = np.random.dirichlet(np.ones(len(setores) - 1), 1).flatten()
         for idx, s in enumerate([x for x in setores if x != 'A']):
             demandas[(t, s)] = int(demanda_total * proporcoes[idx])
         demandas[(t, 'A')] = -sum(demandas[(t, s)] for s in setores if s != 'A')
@@ -62,17 +62,23 @@ else:
     st.markdown("### 📊 Inserir demandas por período e setor")
     for t in periodos:
         st.markdown(f"#### Período {t}")
-        for s in setores:
-            demandas[(t, s)] = st.number_input(f"Demanda para setor {s} (Período {t})", value=0)
+        cols = st.columns(len(setores))
+        for idx, s in enumerate(setores):
+            with cols[idx]:
+                demandas[(t, s)] = st.number_input(f"Setor {s} (P{t})", value=0, step=1000, format="%d")
 
     st.markdown("### 📦 Inserir fluxos permitidos (Arestas)")
     for i in setores:
         for j in setores:
             if i != j:
                 with st.expander(f"Fluxo de {i} para {j}"):
-                    cap = st.number_input(f"Capacidade de {i} para {j}", value=50000)
-                    custo = st.number_input(f"Custo unitário de {i} para {j}", value=2.0)
-                    juros = st.number_input(f"Juros (%) de {i} para {j}", value=3.0) / 100
+                    cols = st.columns(3)
+                    with cols[0]:
+                        cap = st.number_input(f"Capacidade {i}->{j}", value=50000, step=1000)
+                    with cols[1]:
+                        custo = st.number_input(f"Custo {i}->{j}", value=2.0, step=0.1, format="%.2f")
+                    with cols[2]:
+                        juros = st.number_input(f"Juros (%) {i}->{j}", value=3.0, step=0.1) / 100
                     fluxos.append((i, j, cap, custo, juros))
 
 st.markdown("---")
