@@ -67,7 +67,7 @@ else:
             with cols[idx]:
                 demandas[(t, s)] = st.number_input(f"Setor {s} (P{t})", value=0, step=1000, format="%d")
 
-    st.markdown("### 📦 Inserir fluxos permitidos (Arestas)")
+    st.markdown("### ➡️ Inserir fluxos permitidos (Arestas)")
     for i in setores:
         for j in setores:
             if i != j:
@@ -89,7 +89,7 @@ st.dataframe(pd.DataFrame([
     for (t, s) in demandas
 ]))
 
-st.markdown("### 📦 Fluxos permitidos (Arestas)")
+st.markdown("### ➡️ Fluxos permitidos (Arestas)")
 st.dataframe(pd.DataFrame(fluxos, columns=["De", "Para", "Capacidade", "Custo", "Juros"]))
 
 st.markdown("---")
