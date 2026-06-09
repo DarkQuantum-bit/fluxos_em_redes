@@ -26,11 +26,11 @@ if 'modo_dados' not in st.session_state:
     st.session_state.modo_dados = "Gerar aleatoriamente"
 
 # Botão para alternar entre geração aleatória ou inserção manual de dados
-if st.sidebar.button("🔄 Alternar modo de dados"):
+if st.sidebar.button("Alternar modo de dados"):
     st.session_state.modo_dados = "Inserir manualmente" if st.session_state.modo_dados == "Gerar aleatoriamente" else "Gerar aleatoriamente"
 
 modo_dados = st.session_state.modo_dados
-st.sidebar.write(f"📝 Modo atual: **{modo_dados}**")
+st.sidebar.write(f"Modo atual: **{modo_dados}**")
 
 # === Inicialização das estruturas de dados ===
 demandas = {} # Dicionário com demandas de cada setor por período
@@ -43,11 +43,11 @@ if modo_dados == "Gerar aleatoriamente":
     np.random.seed(seed)
 
     # Entrada da demanda total por período
-    st.sidebar.subheader("🔸 Demandas aleatórias")
+    st.sidebar.subheader("Demandas aleatórias")
     demanda_total = st.sidebar.number_input("Demanda total por período (R$)", value=400000)
 
     # Parâmetros para geração dos fluxos
-    st.sidebar.subheader("🔸 Parâmetros dos fluxos aleatórios")
+    st.sidebar.subheader("Parâmetros dos fluxos aleatórios")
     cap_min = st.sidebar.number_input("Capacidade mínima (R$)", value=30000)
     cap_max = st.sidebar.number_input("Capacidade máxima (R$)", value=120000)
     custo_min = st.sidebar.number_input("Custo unitário mínimo", value=1.0)
@@ -74,7 +74,7 @@ if modo_dados == "Gerar aleatoriamente":
 # === Modo 2: inserção manual dos dados pelo usuário ===
 else:
      # Entrada de demandas por período e setor
-    st.markdown("### 📊 Inserir demandas por período e setor")
+    st.markdown("### Inserir demandas por período e setor")
     for t in periodos:
         st.markdown(f"#### Período {t}")
         cols = st.columns(len(setores))
@@ -83,7 +83,7 @@ else:
                 demandas[(t, s)] = st.number_input(f"Setor {s} (P{t})", value=0, step=1000, format="%d")
 
     # Entrada dos fluxos permitidos
-    st.markdown("### ➡️ Inserir fluxos permitidos (Arestas)")
+    st.markdown("### Inserir fluxos permitidos (Arestas)")
     for i in setores:
         for j in setores:
             if i != j:
@@ -100,19 +100,19 @@ else:
 # === Exibição dos dados ===
 st.markdown("---")
 
-st.markdown("### 📊 Demandas por período e setor")
+st.markdown("### Demandas por período e setor")
 st.dataframe(pd.DataFrame([
     {'Período': t, 'Setor': s, 'Demanda': demandas[(t, s)]} 
     for (t, s) in demandas
 ]))
 
-st.markdown("### ➡️ Fluxos permitidos (Arestas)")
+st.markdown("### Fluxos permitidos (Arestas)")
 st.dataframe(pd.DataFrame(fluxos, columns=["De", "Para", "Capacidade", "Custo", "Juros"]))
 
 st.markdown("---")
 
 # === Resolução do problema de otimização ===
-if st.button("🚀 Otimizar"):
+if st.button("Otimizar"):
     # Penalização por erro (usado em relaxamento)
     M = st.sidebar.number_input("Penalização por erro (M)", value=10.0)
     for modo in ["Sem relaxamento", "Com relaxamento"]:
