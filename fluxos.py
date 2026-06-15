@@ -187,7 +187,7 @@ if st.button("Otimizar"):
         # Exibir erros
         if erros_resultado:
             df_erros = pd.DataFrame(erros_resultado, columns=["Setor", "Período", "Erro"])
-            st.markdown("### ⚠️ Demandas não atendidas")
+            st.markdown("### Demandas não atendidas")
             st.dataframe(df_erros)
 
         # Visualização gráfica do grafo de fluxos
