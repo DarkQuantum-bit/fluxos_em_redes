@@ -1,4 +1,3 @@
-# === Importação de bibliotecas necessárias ===
 import streamlit as st                        # Interface web interativa
 import numpy as np                            # Manipulação de arrays e geração de números aleatórios
 import pandas as pd                           # Estrutura de dados em DataFrames
