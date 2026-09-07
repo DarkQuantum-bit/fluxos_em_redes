@@ -4,14 +4,13 @@ import pandas as pd
 import networkx as nx
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
-import plotly.express as px
 import math
 from pulp import LpProblem, LpMinimize, LpVariable, lpSum, LpStatus, value
 
 # Configurações iniciais
 st.set_page_config(page_title="MS529 - Otimização de Fluxo de Caixa", layout="wide")
 
-# CSS simplificado para apresentação acadêmica
+# CSS simplificado
 st.markdown("""
 <style>
     .main-header {
@@ -63,6 +62,10 @@ COR_QUATERNARIA = "#2ecc71"
 setores = ['A', 'B', 'C', 'D', 'E', 'F']
 periodos = [1, 2, 3]
 
+# Estado da sessão
+if 'mostrar_modelagem' not in st.session_state:
+    st.session_state.mostrar_modelagem = False
+
 def validar_dados(demandas, fluxos):
     """Valida se os dados inseridos são consistentes"""
     erros = []
@@ -103,14 +106,14 @@ def criar_modelo_otimizacao(demandas, fluxos, modo, M=10.0):
                         for (i, j, _, custo, juros) in fluxos 
                         for t in periodos)
     
-    # Custo de oportunidade do saldo
-    taxa_oportunidade = 0.02
+    # Custo de oportunidade do saldo (mantido simples)
+    taxa_oportunidade = 0.01
     custo_oportunidade = lpSum(taxa_oportunidade * saldo[s, t] 
                                for s in setores 
                                for t in periodos)
     
     # Custo de juros sobre déficit
-    taxa_juros_deficit = 0.05
+    taxa_juros_deficit = 0.03
     custo_juros = lpSum(taxa_juros_deficit * deficit[s, t] 
                         for s in setores 
                         for t in periodos)
@@ -148,12 +151,6 @@ def criar_modelo_otimizacao(demandas, fluxos, modo, M=10.0):
     for s in setores:
         for t in periodos:
             prob += deficit[s, t] >= -saldo[s, t], f"Deficit_{s}_{t}"
-    
-    # Evitar fluxos circulares para o setor fornecedor A
-    for (i, j, _, _, _) in fluxos:
-        if j == 'A':
-            for t in periodos:
-                prob += x[i, j, t] == 0, f"Sem_entrada_A_{i}_{t}"
     
     prob.solve()
     return prob
@@ -311,7 +308,8 @@ with st.sidebar:
     # Modo de dados
     modo_dados = st.radio(
         "Modo de Entrada de Dados",
-        ["Gerar aleatoriamente", "Inserir manualmente"]
+        ["Gerar aleatoriamente", "Inserir manualmente"],
+        key="modo_dados_radio"
     )
     
     st.divider()
@@ -320,16 +318,20 @@ with st.sidebar:
     st.subheader("Cenário de Análise")
     cenario = st.selectbox(
         "Selecione o cenário",
-        ["Padrão", "Otimista", "Pessimista"]
+        ["Padrão", "Otimista", "Pessimista"],
+        key="cenario_select"
     )
     
     # Fator de ajuste
     if cenario == "Otimista":
         fator_ajuste = 0.8
+        st.caption("Custos 20% menores")
     elif cenario == "Pessimista":
         fator_ajuste = 1.2
+        st.caption("Custos 20% maiores")
     else:
         fator_ajuste = 1.0
+        st.caption("Custos normais")
     
     st.divider()
     
@@ -340,17 +342,18 @@ with st.sidebar:
         value=10.0,
         min_value=1.0,
         max_value=100.0,
-        step=1.0
+        step=1.0,
+        key="parametro_M"
     )
     
     st.divider()
     
     # Botão para mostrar modelagem
     if st.button("Mostrar Modelagem Matemática"):
-        st.session_state.mostrar_modelagem = not st.session_state.get('mostrar_modelagem', False)
+        st.session_state.mostrar_modelagem = not st.session_state.mostrar_modelagem
 
 # Área principal
-if 'mostrar_modelagem' in st.session_state and st.session_state.mostrar_modelagem:
+if st.session_state.mostrar_modelagem:
     with st.expander("Modelagem Matemática", expanded=True):
         st.markdown(r"""
 ### Formulação Matemática
@@ -382,35 +385,37 @@ if modo_dados == "Gerar aleatoriamente":
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        seed = st.number_input("Seed aleatória", min_value=0, value=42)
-        demanda_total = st.number_input("Demanda total por período (R$)", value=400000, step=10000)
+        seed = st.number_input("Seed aleatória", min_value=0, value=42, key="seed_input")
+        demanda_total = st.number_input("Demanda total por período (R$)", value=400000, step=10000, key="demanda_total")
     
     with col2:
-        cap_min = st.number_input("Capacidade mínima (R$)", value=30000, step=1000)
-        cap_max = st.number_input("Capacidade máxima (R$)", value=120000, step=1000)
+        cap_min = st.number_input("Capacidade mínima (R$)", value=30000, step=1000, key="cap_min")
+        cap_max = st.number_input("Capacidade máxima (R$)", value=120000, step=1000, key="cap_max")
     
     with col3:
-        custo_min = st.number_input("Custo unitário mínimo", value=1.0, step=0.1)
-        custo_max = st.number_input("Custo unitário máximo", value=3.0, step=0.1)
+        custo_min = st.number_input("Custo unitário mínimo", value=1.0, step=0.1, key="custo_min")
+        custo_max = st.number_input("Custo unitário máximo", value=3.0, step=0.1, key="custo_max")
     
     col4, col5 = st.columns(2)
     with col4:
-        juros_min = st.number_input("Juros mínimo (%)", value=1.0, step=0.1)
+        juros_min = st.number_input("Juros mínimo (%)", value=1.0, step=0.1, key="juros_min")
     with col5:
-        juros_max = st.number_input("Juros máximo (%)", value=5.0, step=0.1)
+        juros_max = st.number_input("Juros máximo (%)", value=5.0, step=0.1, key="juros_max")
     
-    np.random.seed(seed)
+    np.random.seed(int(seed))
     
+    # Gerar demandas
     for t in periodos:
         proporcoes = np.random.dirichlet(np.ones(len(setores) - 1), 1).flatten()
         for idx, s in enumerate([x for x in setores if x != 'A']):
             demandas[(t, s)] = int(demanda_total * proporcoes[idx])
         demandas[(t, 'A')] = -sum(demandas[(t, s)] for s in setores if s != 'A')
     
+    # Gerar fluxos - CORRIGIDO: A pode enviar fluxos
     for i in setores:
         for j in setores:
-            if i != j and i != 'A':
-                cap = np.random.randint(cap_min, cap_max)
+            if i != j and j != 'A':  # A não recebe, mas pode enviar
+                cap = np.random.randint(int(cap_min), int(cap_max))
                 custo = np.round(np.random.uniform(custo_min, custo_max), 2)
                 juros = np.round(np.random.uniform(juros_min / 100, juros_max / 100), 4)
                 fluxos.append((i, j, cap, custo * fator_ajuste, juros * fator_ajuste))
@@ -431,12 +436,13 @@ else:
         
         for s in setores:
             for t in periodos:
-                df_demandas_input.loc[s, f"Período {t}"] = demandas.get((t, s), 0)
+                df_demandas_input.loc[s, f"Período {t}"] = 0
         
         df_demandas_editado = st.data_editor(
             df_demandas_input,
             use_container_width=True,
             num_rows="fixed",
+            key="editor_demandas",
             column_config={
                 **{f"Período {t}": st.column_config.NumberColumn(
                     f"Período {t}",
@@ -457,29 +463,27 @@ else:
     with tab_fluxos:
         st.markdown("#### Fluxos Permitidos entre Setores")
         
-        df_fluxos_input = pd.DataFrame(
-            index=range(25),
-            columns=["De", "Para", "Capacidade", "Custo", "Juros (%)"]
-        )
-        
-        idx = 0
+        # Criar lista de fluxos padrão - CORRIGIDO: A pode enviar
+        fluxos_padrao = []
         for i in setores:
             for j in setores:
-                if i != j and i != 'A':
-                    df_fluxos_input.loc[idx, "De"] = i
-                    df_fluxos_input.loc[idx, "Para"] = j
-                    df_fluxos_input.loc[idx, "Capacidade"] = 50000
-                    df_fluxos_input.loc[idx, "Custo"] = 2.0
-                    df_fluxos_input.loc[idx, "Juros (%)"] = 3.0
-                    idx += 1
+                if i != j and j != 'A':  # A não recebe, mas pode enviar
+                    fluxos_padrao.append({
+                        "De": i,
+                        "Para": j,
+                        "Capacidade": 50000,
+                        "Custo": 2.0,
+                        "Juros (%)": 3.0
+                    })
         
-        df_fluxos_input = df_fluxos_input.dropna()
+        df_fluxos_input = pd.DataFrame(fluxos_padrao)
         
         df_fluxos_editado = st.data_editor(
             df_fluxos_input,
             use_container_width=True,
             num_rows="dynamic",
             hide_index=True,
+            key="editor_fluxos",
             column_config={
                 "De": st.column_config.SelectboxColumn("De", options=setores),
                 "Para": st.column_config.SelectboxColumn("Para", options=setores),
@@ -492,7 +496,7 @@ else:
         fluxos = []
         for _, row in df_fluxos_editado.iterrows():
             if pd.notna(row["De"]) and pd.notna(row["Para"]):
-                if row["De"] != row["Para"] and row["De"] != 'A':
+                if row["De"] != row["Para"] and row["Para"] != 'A':
                     fluxos.append((
                         row["De"],
                         row["Para"],
@@ -608,6 +612,15 @@ if botao_otimizar:
                         df_erros = pd.DataFrame(erros_resultado, 
                                                columns=["Setor", "Período", "Erro", "Tipo"])
                         st.dataframe(df_erros, use_container_width=True)
+                    
+                    # Exibir saldos se houver
+                    if saldos_resultado:
+                        st.markdown("### Saldos por Setor e Período")
+                        df_saldos = pd.DataFrame(saldos_resultado, 
+                                                columns=["Setor", "Período", "Saldo"])
+                        pivot_saldos = df_saldos.pivot(index='Setor', columns='Período', values='Saldo')
+                        pivot_saldos.columns = [f'P{t}' for t in periodos]
+                        st.dataframe(pivot_saldos, use_container_width=True)
         
         # Tab comparativo
         with tabs_resultados[2]:
