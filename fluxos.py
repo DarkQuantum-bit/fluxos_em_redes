@@ -809,3 +809,142 @@ if botao_otimizar:
                             <div class="metric-value">R$ {:.0f}</div>
                         </div>
                         """.format(value(prob.objective)), unsafe_allow_html=True)
+                    
+                    with col3:
+                        total_fluxo = sum(f[3] for f in fluxos_resultado)
+                        st.markdown("""
+                        <div class="metric-card">
+                            <div class="metric-label">Volume Transacionado</div>
+                            <div class="metric-value">R$ {:.0f}</div>
+                        </div>
+                        """.format(total_fluxo), unsafe_allow_html=True)
+                    
+                    with col4:
+                        st.markdown("""
+                        <div class="metric-card">
+                            <div class="metric-label">Fluxos Ativos</div>
+                            <div class="metric-value">{}</div>
+                        </div>
+                        """.format(len(fluxos_resultado)), unsafe_allow_html=True)
+                    
+                    # Visualização do grafo direcionado
+                    if fluxos_resultado:
+                        st.markdown("### Rede de Fluxos")
+                        df_fluxos_resultado = pd.DataFrame(fluxos_resultado, 
+                                                           columns=["De", "Para", "Período", "Fluxo"])
+                        
+                        # Seletor de visualização
+                        viz_tipo = st.radio(
+                            "Tipo de Visualização",
+                            ["Grafo Direcionado", "Diagrama de Sankey"],
+                            horizontal=True,
+                            key=f"viz_{modo}"
+                        )
+                        
+                        if viz_tipo == "Grafo Direcionado":
+                            fig_grafo = criar_grafo_direcionado_temporal(df_fluxos_resultado, modo)
+                            if fig_grafo:
+                                st.plotly_chart(fig_grafo, use_container_width=True)
+                        else:
+                            fig_sankey = criar_grafico_sankey(df_fluxos_resultado, modo)
+                            if fig_sankey:
+                                st.plotly_chart(fig_sankey, use_container_width=True)
+                        
+                        # Análise temporal
+                        st.markdown("### Análise Temporal")
+                        fig_comparativo = criar_grafico_comparativo(fluxos_resultado)
+                        st.pyplot(fig_comparativo)
+                        
+                        # Tabela de fluxos detalhada
+                        st.markdown("### Detalhamento dos Fluxos")
+                        df_fluxos_resultado['Fluxo'] = df_fluxos_resultado['Fluxo'].round(2)
+                        st.dataframe(df_fluxos_resultado, use_container_width=True)
+                        
+                        # Análise de utilização
+                        st.markdown("### Utilização de Capacidade")
+                        utilizacao_data = []
+                        for (i, j, cap, _, _) in fluxos:
+                            fluxo_total = df_fluxos_resultado[
+                                (df_fluxos_resultado['De'] == i) & 
+                                (df_fluxos_resultado['Para'] == j)
+                            ]['Fluxo'].sum()
+                            utilizacao = (fluxo_total / (cap * len(periodos))) * 100
+                            utilizacao_data.append({
+                                'De': i, 'Para': j,
+                                'Fluxo Total': fluxo_total,
+                                'Capacidade': cap,
+                                'Utilização (%)': round(utilizacao, 1)
+                            })
+                        
+                        df_utilizacao = pd.DataFrame(utilizacao_data)
+                        df_utilizacao = df_utilizacao[df_utilizacao['Fluxo Total'] > 0]
+                        
+                        if not df_utilizacao.empty:
+                            # Gráfico de barras horizontais
+                            fig_utilizacao = px.bar(
+                                df_utilizacao,
+                                x='Utilização (%)',
+                                y=[f"{row['De']}→{row['Para']}" for _, row in df_utilizacao.iterrows()],
+                                orientation='h',
+                                title='Utilização de Capacidade por Fluxo',
+                                color='Utilização (%)',
+                                color_continuous_scale='RdYlGn_r',
+                                range_color=[0, 100]
+                            )
+                            fig_utilizacao.update_layout(
+                                xaxis_title="Utilização (%)",
+                                yaxis_title="Fluxo",
+                                height=400
+                            )
+                            st.plotly_chart(fig_utilizacao, use_container_width=True)
+                            
+                            st.dataframe(df_utilizacao, use_container_width=True)
+                    
+                    # Exibir erros se houver
+                    if erros_resultado:
+                        st.markdown("### Demandas Não Atendidas")
+                        df_erros = pd.DataFrame(erros_resultado, 
+                                               columns=["Setor", "Período", "Erro", "Tipo"])
+                        st.dataframe(df_erros, use_container_width=True)
+        
+        # Tab comparativo
+        with tabs_resultados[2]:
+            if len(resultados) == 2:
+                st.markdown("### Comparação entre Modos")
+                
+                col1, col2 = st.columns(2)
+                
+                for idx, (modo, res) in enumerate(resultados.items()):
+                    with (col1 if idx == 0 else col2):
+                        st.markdown(f"#### {modo}")
+                        st.markdown(f"**Status:** {res['status']}")
+                        st.markdown(f"**Custo Total:** R$ {res['custo_total']:,.2f}")
+                        st.markdown(f"**Número de Fluxos:** {len(res['fluxos'])}")
+                        st.markdown(f"**Erros:** {len(res['erros'])}")
+                
+                # Gráfico comparativo
+                fig_comparacao = go.Figure(data=[
+                    go.Bar(
+                        x=list(resultados.keys()),
+                        y=[res['custo_total'] for res in resultados.values()],
+                        text=[f"R$ {res['custo_total']:,.2f}" for res in resultados.values()],
+                        textposition='auto',
+                        marker_color=[COR_PRINCIPAL, COR_SECUNDARIA]
+                    )
+                ])
+                
+                fig_comparacao.update_layout(
+                    title="Comparação de Custos Totais",
+                    xaxis_title="Modo",
+                    yaxis_title="Custo Total (R$)",
+                    height=400
+                )
+                
+                st.plotly_chart(fig_comparacao, use_container_width=True)
+
+# Footer
+st.markdown("---")
+st.markdown(
+    "<p style='text-align: center; color: #666;'>Desenvolvido para a disciplina MS529 - Otimização de Fluxo de Caixa</p>",
+    unsafe_allow_html=True
+)
