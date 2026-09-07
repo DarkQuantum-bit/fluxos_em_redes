@@ -85,72 +85,52 @@ def validar_dados(demandas, fluxos):
         if custo < 0 or juros < 0:
             erros.append(f"Fluxo {i}->{j}: Custos e juros não podem ser negativos")
     
+    # Verificar se há capacidade total suficiente
+    if fluxos:
+        total_demanda_positiva = sum(max(0, demandas[(t, s)]) for t in periodos for s in setores if s != 'A')
+        total_capacidade_saida_A = sum(cap for (i, j, cap, _, _) in fluxos if i == 'A')
+        if total_capacidade_saida_A < total_demanda_positiva:
+            warnings.append(f"Capacidade total do setor A ({total_capacidade_saida_A:,.0f}) pode ser insuficiente para demanda total ({total_demanda_positiva:,.0f})")
+    
     return erros, warnings
 
-def criar_modelo_otimizacao(demandas, fluxos, modo, M=10000.0):
-    """Cria e resolve o modelo de otimização"""
-    prob = LpProblem(f"Fluxo_Caixa_{modo}", LpMinimize)
+def criar_modelo_otimizacao(demandas, fluxos):
+    """Cria e resolve o modelo de otimização (apenas sem relaxamento)"""
+    prob = LpProblem("Fluxo_Caixa", LpMinimize)
     
     # Variáveis de decisão
     x = LpVariable.dicts("x", ((i, j, t) for (i, j, _, _, _) in fluxos for t in periodos), lowBound=0)
     saldo = LpVariable.dicts("saldo", ((s, t) for s in setores for t in periodos), lowBound=0)
-    deficit = LpVariable.dicts("deficit", ((s, t) for s in setores for t in periodos), lowBound=0)
     
-    # Variáveis de erro (se relaxado)
-    if modo == "Com relaxamento":
-        erro_pos = LpVariable.dicts("erro_pos", ((s, t) for s in setores for t in periodos), lowBound=0)
-        erro_neg = LpVariable.dicts("erro_neg", ((s, t) for s in setores for t in periodos), lowBound=0)
-    
-    # Função objetivo - APENAS custo de fluxo (sem custo de oportunidade)
+    # Função objetivo - minimizar custo total de fluxos
     custo_total = lpSum((custo + juros) * x[i, j, t] 
                         for (i, j, _, custo, juros) in fluxos 
                         for t in periodos)
     
-    prob += custo_total
-    
-    if modo == "Com relaxamento":
-        # Penalidade ALTA para garantir que fluxos sejam usados
-        # M deve ser muito maior que qualquer custo de fluxo possível
-        M_efetivo = max(M, 10000.0)  # Garantir penalização muito alta
-        
-        penalidade = lpSum(M_efetivo * (erro_pos[s, t] + erro_neg[s, t])
-                          for s in setores 
-                          for t in periodos)
-        prob += penalidade
+    prob += custo_total, "Custo_Total"
     
     # Restrições de capacidade
     for (i, j, cap, _, _) in fluxos:
         for t in periodos:
             prob += x[i, j, t] <= cap, f"Capacidade_{i}_{j}_{t}"
     
-    # Restrições de balanço
+    # Restrições de balanço de fluxo
     for s in setores:
         for t in periodos:
             entradas = lpSum(x[i, s, t] for (i, j, _, _, _) in fluxos if j == s)
             saidas = lpSum(x[s, j, t] for (i, j, _, _, _) in fluxos if i == s)
             saldo_prev = 0 if t == 1 else saldo[s, t-1]
             
-            if modo == "Com relaxamento":
-                prob += (entradas - saidas + saldo_prev + erro_pos[s, t] - erro_neg[s, t]
-                        == demandas.get((t, s), 0) + saldo[s, t],
-                        f"Balanco_{s}_{t}")
-            else:
-                prob += (entradas - saidas + saldo_prev
-                        == demandas.get((t, s), 0) + saldo[s, t],
-                        f"Balanco_{s}_{t}")
-    
-    # Restrições de déficit
-    for s in setores:
-        for t in periodos:
-            prob += deficit[s, t] >= -saldo[s, t], f"Deficit_{s}_{t}"
+            prob += (entradas - saidas + saldo_prev
+                    == demandas.get((t, s), 0) + saldo[s, t],
+                    f"Balanco_{s}_{t}")
     
     prob.solve()
     return prob
 
-def extrair_resultados(prob, modo):
+def extrair_resultados(prob):
     """Extrai resultados do modelo resolvido"""
     fluxos_resultado = []
-    erros_resultado = []
     saldos_resultado = []
     
     for v in prob.variables():
@@ -161,19 +141,13 @@ def extrair_resultados(prob, modo):
                 para = partes[2].strip("(),' ")
                 t = int(partes[3].strip("(),' "))
                 fluxos_resultado.append([de, para, t, v.varValue])
-            elif "erro_pos_" in v.name or "erro_neg_" in v.name:
-                partes = v.name.split("_")
-                tipo = "positivo" if "pos" in v.name else "negativo"
-                setor = partes[2].strip("(),' ")
-                t = int(partes[3].strip("(),' "))
-                erros_resultado.append([setor, t, v.varValue, tipo])
             elif "saldo_" in v.name:
                 partes = v.name.split("_")
                 setor = partes[1].strip("(),' ")
                 t = int(partes[2].strip("(),' "))
                 saldos_resultado.append([setor, t, v.varValue])
     
-    return fluxos_resultado, erros_resultado, saldos_resultado
+    return fluxos_resultado, saldos_resultado
 
 def criar_grafico_comparativo(fluxos_resultado):
     """Cria gráfico de barras com volume por período"""
@@ -202,7 +176,7 @@ def criar_grafico_comparativo(fluxos_resultado):
     plt.tight_layout()
     return fig
 
-def criar_grafo_direcionado_temporal(df_fluxos, modo):
+def criar_grafo_direcionado_temporal(df_fluxos):
     """Cria grafo direcionado usando networkx e matplotlib"""
     if df_fluxos.empty:
         return None
@@ -279,7 +253,7 @@ def criar_grafo_direcionado_temporal(df_fluxos, modo):
                va='center',
                bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.8))
     
-    ax.set_title(f'Grafo de Fluxos Direcionados - {modo}', fontsize=14, fontweight='bold')
+    ax.set_title('Grafo de Fluxos Direcionados', fontsize=14, fontweight='bold')
     ax.axis('off')
     
     plt.tight_layout()
@@ -327,20 +301,6 @@ with st.sidebar:
     
     st.divider()
     
-    # Parâmetros de otimização
-    st.subheader("Parâmetros de Otimização")
-    M = st.number_input(
-        "Penalização por erro (M)",
-        value=10000.0,
-        min_value=1000.0,
-        max_value=100000.0,
-        step=1000.0,
-        key="parametro_M",
-        help="Valor da penalização para violações de demanda. Deve ser muito maior que os custos de fluxo."
-    )
-    
-    st.divider()
-    
     # Botão para mostrar modelagem
     if st.button("Mostrar Modelagem Matemática"):
         st.session_state.mostrar_modelagem = not st.session_state.mostrar_modelagem
@@ -354,17 +314,14 @@ if st.session_state.mostrar_modelagem:
 **Variáveis de Decisão:**
 - $x_{ijt} \geq 0$: Fluxo financeiro do setor $i$ para $j$ no período $t$
 - $s_{st} \geq 0$: Saldo acumulado do setor $s$ no período $t$  
-- $d_{st} \geq 0$: Déficit financeiro do setor $s$ no período $t$
-- $e^+_{st}, e^-_{st} \geq 0$: Violações de demanda (modo relaxado)
 
 **Função Objetivo:**
-$$\min \sum_{i,j,t} (c_{ij} + r_{ij})x_{ijt} + M\sum_{s,t}(e^+_{st} + e^-_{st})$$
+$$\min \sum_{i,j,t} (c_{ij} + r_{ij})x_{ijt}$$
 
 **Sujeito a:**
 1. **Capacidade:** $x_{ijt} \leq cap_{ij}, \forall i,j,t$
 2. **Balanço de fluxo:** $\sum_i x_{ist} - \sum_j x_{sjt} + s_{s,t-1} = D_{st} + s_{st}, \forall s,t$
-3. **Déficit:** $d_{st} \geq -s_{st}, \forall s,t$
-4. **Não negatividade:** $x_{ijt}, s_{st}, d_{st} \geq 0$
+3. **Não negatividade:** $x_{ijt}, s_{st} \geq 0$
 """)
 
 # Inicialização das estruturas de dados
@@ -546,127 +503,72 @@ if botao_otimizar:
     if not fluxos:
         st.error("Nenhum fluxo definido. Configure os fluxos permitidos antes de otimizar.")
     else:
-        resultados = {}
-        
-        tabs_resultados = st.tabs(["Sem Relaxamento", "Com Relaxamento", "Comparativo"])
-        
-        for idx, modo in enumerate(["Sem relaxamento", "Com relaxamento"]):
-            with tabs_resultados[idx]:
-                with st.spinner(f"Resolvendo problema {modo}..."):
-                    prob = criar_modelo_otimizacao(demandas, fluxos, modo, M)
-                    
-                    fluxos_resultado, erros_resultado, saldos_resultado = extrair_resultados(prob, modo)
-                    
-                    resultados[modo] = {
-                        'status': LpStatus[prob.status],
-                        'custo_total': value(prob.objective),
-                        'fluxos': fluxos_resultado,
-                        'erros': erros_resultado,
-                        'saldos': saldos_resultado
-                    }
-                    
-                    # Métricas principais
-                    col1, col2, col3 = st.columns(3)
-                    
-                    with col1:
-                        st.metric("Status", LpStatus[prob.status])
-                    
-                    with col2:
-                        st.metric("Custo Total", f"R$ {value(prob.objective):,.2f}")
-                    
-                    with col3:
-                        total_fluxo = sum(f[3] for f in fluxos_resultado)
-                        st.metric("Volume Total", f"R$ {total_fluxo:,.2f}")
-                    
-                    # Visualização do grafo
-                    if fluxos_resultado:
-                        st.markdown("### Grafo de Fluxos")
-                        df_fluxos_resultado = pd.DataFrame(fluxos_resultado, 
-                                                           columns=["De", "Para", "Período", "Fluxo"])
-                        
-                        fig_grafo = criar_grafo_direcionado_temporal(df_fluxos_resultado, modo)
-                        if fig_grafo:
-                            st.pyplot(fig_grafo)
-                        
-                        # Análise temporal
-                        st.markdown("### Análise Temporal")
-                        fig_comparativo = criar_grafico_comparativo(fluxos_resultado)
-                        if fig_comparativo:
-                            st.pyplot(fig_comparativo)
-                        
-                        # Tabela de fluxos
-                        st.markdown("### Detalhamento dos Fluxos")
-                        df_fluxos_resultado['Fluxo'] = df_fluxos_resultado['Fluxo'].round(2)
-                        st.dataframe(df_fluxos_resultado, use_container_width=True)
-                    
-                    # Exibir erros se houver
-                    if erros_resultado:
-                        st.markdown("### Demandas Não Atendidas")
-                        df_erros = pd.DataFrame(erros_resultado, 
-                                               columns=["Setor", "Período", "Erro", "Tipo"])
-                        st.dataframe(df_erros, use_container_width=True)
-                    
-                    # Exibir saldos se houver
-                    if saldos_resultado:
-                        st.markdown("### Saldos por Setor e Período")
-                        df_saldos = pd.DataFrame(saldos_resultado, 
-                                                columns=["Setor", "Período", "Saldo"])
-                        
-                        # Criar pivot table garantindo todos os períodos
-                        pivot_saldos = df_saldos.pivot_table(
-                            index='Setor', 
-                            columns='Período', 
-                            values='Saldo',
-                            fill_value=0,
-                            aggfunc='sum'
-                        )
-                        
-                        # Garantir que todas as colunas de período existam
-                        for t in periodos:
-                            if t not in pivot_saldos.columns:
-                                pivot_saldos[t] = 0
-                        
-                        # Ordenar colunas
-                        pivot_saldos = pivot_saldos[sorted(pivot_saldos.columns)]
-                        pivot_saldos.columns = [f'P{t}' for t in pivot_saldos.columns]
-                        
-                        st.dataframe(pivot_saldos, use_container_width=True)
-        
-        # Tab comparativo
-        with tabs_resultados[2]:
-            if len(resultados) == 2:
-                st.markdown("### Comparação entre Modos")
+        with st.spinner("Resolvendo problema de otimização..."):
+            prob = criar_modelo_otimizacao(demandas, fluxos)
+            
+            fluxos_resultado, saldos_resultado = extrair_resultados(prob)
+            
+            # Métricas principais
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.metric("Status", LpStatus[prob.status])
+            
+            with col2:
+                st.metric("Custo Total", f"R$ {value(prob.objective):,.2f}")
+            
+            with col3:
+                total_fluxo = sum(f[3] for f in fluxos_resultado)
+                st.metric("Volume Total", f"R$ {total_fluxo:,.2f}")
+            
+            # Visualização do grafo
+            if fluxos_resultado:
+                st.markdown("### Grafo de Fluxos")
+                df_fluxos_resultado = pd.DataFrame(fluxos_resultado, 
+                                                   columns=["De", "Para", "Período", "Fluxo"])
                 
-                col1, col2 = st.columns(2)
+                fig_grafo = criar_grafo_direcionado_temporal(df_fluxos_resultado)
+                if fig_grafo:
+                    st.pyplot(fig_grafo)
                 
-                for idx, (modo, res) in enumerate(resultados.items()):
-                    with (col1 if idx == 0 else col2):
-                        st.markdown(f"**{modo}**")
-                        st.markdown(f"Status: {res['status']}")
-                        st.markdown(f"Custo Total: R$ {res['custo_total']:,.2f}")
-                        st.markdown(f"Fluxos: {len(res['fluxos'])}")
-                        st.markdown(f"Erros: {len(res['erros'])}")
+                # Análise temporal
+                st.markdown("### Análise Temporal")
+                fig_comparativo = criar_grafico_comparativo(fluxos_resultado)
+                if fig_comparativo:
+                    st.pyplot(fig_comparativo)
                 
-                # Gráfico comparativo
-                fig_comparacao = go.Figure(data=[
-                    go.Bar(
-                        x=list(resultados.keys()),
-                        y=[res['custo_total'] for res in resultados.values()],
-                        text=[f"R$ {res['custo_total']:,.2f}" for res in resultados.values()],
-                        textposition='auto',
-                        marker_color=[COR_PRINCIPAL, COR_SECUNDARIA]
-                    )
-                ])
+                # Tabela de fluxos
+                st.markdown("### Detalhamento dos Fluxos")
+                df_fluxos_resultado['Fluxo'] = df_fluxos_resultado['Fluxo'].round(2)
+                st.dataframe(df_fluxos_resultado, use_container_width=True)
+            
+            # Exibir saldos se houver
+            if saldos_resultado:
+                st.markdown("### Saldos por Setor e Período")
+                df_saldos = pd.DataFrame(saldos_resultado, 
+                                        columns=["Setor", "Período", "Saldo"])
                 
-                fig_comparacao.update_layout(
-                    title="Comparação de Custos Totais",
-                    xaxis_title="Modo",
-                    yaxis_title="Custo Total (R$)",
-                    height=400,
-                    showlegend=False
+                # Criar pivot table garantindo todos os períodos
+                pivot_saldos = df_saldos.pivot_table(
+                    index='Setor', 
+                    columns='Período', 
+                    values='Saldo',
+                    fill_value=0,
+                    aggfunc='sum'
                 )
                 
-                st.plotly_chart(fig_comparacao, use_container_width=True)
+                # Garantir que todas as colunas de período existam
+                for t in periodos:
+                    if t not in pivot_saldos.columns:
+                        pivot_saldos[t] = 0
+                
+                # Ordenar colunas
+                pivot_saldos = pivot_saldos[sorted(pivot_saldos.columns)]
+                pivot_saldos.columns = [f'P{t}' for t in pivot_saldos.columns]
+                
+                st.dataframe(pivot_saldos, use_container_width=True)
+            else:
+                st.info("Não há saldos acumulados.")
 
 # Footer
 st.markdown("---")
