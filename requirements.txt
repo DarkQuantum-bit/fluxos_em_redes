@@ -1,6 +1,7 @@
 streamlit
-pulp
-networkx
-matplotlib
 pandas
 numpy
+networkx
+matplotlib
+plotly
+pulp
