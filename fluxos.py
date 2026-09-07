@@ -10,7 +10,7 @@ from pulp import LpProblem, LpMinimize, LpVariable, lpSum, LpStatus, value
 # Configurações iniciais
 st.set_page_config(page_title="MS529 - Otimização de Fluxo de Caixa", layout="wide")
 
-# CSS simplificado
+# CSS simplificado para apresentação acadêmica
 st.markdown("""
 <style>
     .main-header {
@@ -101,19 +101,23 @@ def criar_modelo_otimizacao(demandas, fluxos, modo, M=10.0):
         erro_pos = LpVariable.dicts("erro_pos", ((s, t) for s in setores for t in periodos), lowBound=0)
         erro_neg = LpVariable.dicts("erro_neg", ((s, t) for s in setores for t in periodos), lowBound=0)
     
+    # Calcular custo máximo possível de fluxo
+    custo_max_fluxo = max(custo + juros for (_, _, _, custo, juros) in fluxos) if fluxos else 1.0
+    taxa_oportunidade = 0.01
+    taxa_juros_deficit = 0.03
+    
+    # M efetivo deve ser maior que o custo máximo de fluxo
+    M_efetivo = max(M, custo_max_fluxo * 10)  # Pelo menos 10x o custo máximo
+    
     # Função objetivo
     custo_total = lpSum((custo + juros) * x[i, j, t] 
                         for (i, j, _, custo, juros) in fluxos 
                         for t in periodos)
     
-    # Custo de oportunidade do saldo (mantido simples)
-    taxa_oportunidade = 0.01
     custo_oportunidade = lpSum(taxa_oportunidade * saldo[s, t] 
                                for s in setores 
                                for t in periodos)
     
-    # Custo de juros sobre déficit
-    taxa_juros_deficit = 0.03
     custo_juros = lpSum(taxa_juros_deficit * deficit[s, t] 
                         for s in setores 
                         for t in periodos)
@@ -121,7 +125,7 @@ def criar_modelo_otimizacao(demandas, fluxos, modo, M=10.0):
     prob += custo_total + custo_oportunidade + custo_juros
     
     if modo == "Com relaxamento":
-        penalidade = lpSum(M * (erro_pos[s, t] + erro_neg[s, t])
+        penalidade = lpSum(M_efetivo * (erro_pos[s, t] + erro_neg[s, t])
                           for s in setores 
                           for t in periodos)
         prob += penalidade
@@ -339,11 +343,12 @@ with st.sidebar:
     st.subheader("Parâmetros de Otimização")
     M = st.number_input(
         "Penalização por erro (M)",
-        value=10.0,
-        min_value=1.0,
-        max_value=100.0,
-        step=1.0,
-        key="parametro_M"
+        value=100.0,
+        min_value=10.0,
+        max_value=1000.0,
+        step=10.0,
+        key="parametro_M",
+        help="Valor da penalização para violações de demanda. Deve ser maior que os custos de fluxo."
     )
     
     st.divider()
@@ -411,7 +416,7 @@ if modo_dados == "Gerar aleatoriamente":
             demandas[(t, s)] = int(demanda_total * proporcoes[idx])
         demandas[(t, 'A')] = -sum(demandas[(t, s)] for s in setores if s != 'A')
     
-    # Gerar fluxos - CORRIGIDO: A pode enviar fluxos
+    # Gerar fluxos - A pode enviar, mas não receber
     for i in setores:
         for j in setores:
             if i != j and j != 'A':  # A não recebe, mas pode enviar
@@ -463,7 +468,7 @@ else:
     with tab_fluxos:
         st.markdown("#### Fluxos Permitidos entre Setores")
         
-        # Criar lista de fluxos padrão - CORRIGIDO: A pode enviar
+        # Criar lista de fluxos padrão - A pode enviar, mas não receber
         fluxos_padrao = []
         for i in setores:
             for j in setores:
