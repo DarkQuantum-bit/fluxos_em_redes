@@ -4,51 +4,112 @@ import pandas as pd
 import networkx as nx
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
+import plotly.express as px
 import math
 from pulp import LpProblem, LpMinimize, LpVariable, lpSum, LpStatus, value
 
 # Configurações iniciais
-st.set_page_config(page_title="Otimização de Fluxo de Caixa", layout="wide")
+st.set_page_config(page_title="Otimização de Fluxo de Caixa", layout="wide", initial_sidebar_state="expanded")
 
-# CSS personalizado
+# CSS personalizado para dashboard
 st.markdown("""
 <style>
+    /* Header principal */
     .main-header {
+        background: linear-gradient(135deg, #1f3a5f 0%, #2c5282 100%);
+        color: white;
+        padding: 2rem;
+        border-radius: 10px;
+        margin-bottom: 2rem;
         text-align: center;
-        color: #1f3a5f;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    .main-header h1 {
+        margin: 0;
         font-size: 2.5rem;
         font-weight: 700;
-        margin-bottom: 0.5rem;
     }
-    .sub-header {
-        text-align: center;
-        color: #4a6fa5;
-        font-size: 1.2rem;
-        margin-bottom: 2rem;
+    .main-header p {
+        margin: 0.5rem 0 0 0;
+        font-size: 1.1rem;
+        opacity: 0.9;
     }
+    
+    /* Cards de métricas */
     .metric-card {
-        background-color: #f8f9fa;
-        border-radius: 8px;
-        padding: 1rem;
+        background: white;
+        border-radius: 10px;
+        padding: 1.5rem;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        border-left: 4px solid #1f3a5f;
         margin-bottom: 1rem;
     }
+    .metric-value {
+        font-size: 2rem;
+        font-weight: 700;
+        color: #1f3a5f;
+    }
+    .metric-label {
+        font-size: 0.9rem;
+        color: #666;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    /* Seções */
+    .section-header {
+        color: #1f3a5f;
+        border-bottom: 2px solid #e2e8f0;
+        padding-bottom: 0.5rem;
+        margin-bottom: 1rem;
+        font-size: 1.5rem;
+        font-weight: 600;
+    }
+    
+    /* Tabs */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 2rem;
+    }
+    .stTabs [data-baseweb="tab"] {
+        padding: 0.5rem 1rem;
+        font-weight: 500;
+    }
+    
+    /* DataFrames */
+    .dataframe {
+        font-size: 0.9rem !important;
+    }
+    
+    /* Botões */
     .stButton button {
-        background-color: #1f3a5f;
+        background: linear-gradient(135deg, #1f3a5f 0%, #2c5282 100%);
         color: white;
         font-weight: 600;
-        border-radius: 4px;
+        border-radius: 6px;
+        padding: 0.5rem 2rem;
+        border: none;
+        transition: all 0.3s;
     }
     .stButton button:hover {
-        background-color: #4a6fa5;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
     }
+    
+    /* Sidebar */
     .sidebar-content {
         padding: 1rem 0;
+    }
+    .sidebar-header {
+        color: #1f3a5f;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
     }
 </style>
 """, unsafe_allow_html=True)
 
 COR_PRINCIPAL = "#1f3a5f"
 COR_SECUNDARIA = "#4a6fa5"
+COR_TERCIARIA = "#48bb78"
 
 # Definições de setores e períodos
 setores = ['A', 'B', 'C', 'D', 'E', 'F']
@@ -59,6 +120,8 @@ if 'modo_dados' not in st.session_state:
     st.session_state.modo_dados = "Gerar aleatoriamente"
 if 'resultados' not in st.session_state:
     st.session_state.resultados = None
+if 'dados_carregados' not in st.session_state:
+    st.session_state.dados_carregados = False
 
 def validar_dados(demandas, fluxos):
     """Valida se os dados inseridos são consistentes"""
@@ -189,227 +252,250 @@ def extrair_resultados(prob, modo):
     
     return fluxos_resultado, erros_resultado, saldos_resultado
 
-def criar_grafo_interativo(df_fluxos, modo):
-    """Cria grafo interativo com Plotly"""
-    G = nx.DiGraph()
-    for s in setores:
-        G.add_node(s)
+def criar_grafo_direcionado_temporal(df_fluxos, modo):
+    """Cria grafo direcionado com informações temporais usando Plotly"""
+    if df_fluxos.empty:
+        return None
     
+    # Preparar dados para o grafo
+    edges_data = []
     for _, row in df_fluxos.iterrows():
-        if G.has_edge(row['De'], row['Para']):
-            G[row['De']][row['Para']]['weight'] += row['Fluxo']
-        else:
-            G.add_edge(row['De'], row['Para'], weight=row['Fluxo'])
+        edges_data.append({
+            'source': row['De'],
+            'target': row['Para'],
+            'periodo': row['Período'],
+            'fluxo': row['Fluxo']
+        })
     
+    # Agregar fluxos por aresta (soma total)
+    df_agregado = df_fluxos.groupby(['De', 'Para'])['Fluxo'].sum().reset_index()
+    
+    # Criar posições dos nós
     pos = {'A': (0, 0)}
     for idx, s in enumerate(['B', 'C', 'D', 'E', 'F']):
         angle = 2 * math.pi * idx / 5
         pos[s] = (5 * np.cos(angle), 5 * np.sin(angle))
     
+    # Criar traços para arestas com setas
     edge_traces = []
-    for (i, j) in G.edges():
-        x0, y0 = pos[i]
-        x1, y1 = pos[j]
+    
+    for _, edge in df_agregado.iterrows():
+        source, target, fluxo_total = edge['De'], edge['Para'], edge['Fluxo']
+        
+        # Filtrar fluxos por período para essa aresta
+        fluxos_periodo = df_fluxos[
+            (df_fluxos['De'] == source) & 
+            (df_fluxos['Para'] == target)
+        ]
+        
+        x0, y0 = pos[source]
+        x1, y1 = pos[target]
+        
+        # Criar hover text com informações por período
+        hover_text = f"{source} → {target}<br>Fluxo Total: R$ {fluxo_total:,.2f}<br><br>"
+        for _, fluxo_periodo in fluxos_periodo.iterrows():
+            hover_text += f"Período {fluxo_periodo['Período']}: R$ {fluxo_periodo['Fluxo']:,.2f}<br>"
+        
+        # Calcular curvatura para evitar sobreposição
+        dx = x1 - x0
+        dy = y1 - y0
+        dist = math.sqrt(dx**2 + dy**2)
+        
+        # Criar curva suave
+        t = np.linspace(0, 1, 20)
+        curve_x = x0 + dx * t
+        curve_y = y0 + dy * t
+        
+        # Adicionar curvatura para arestas bidirecionais
+        if df_agregado[(df_agregado['De'] == target) & (df_agregado['Para'] == source)].shape[0] > 0:
+            offset = 0.5
+            curve_x = x0 + dx * t + offset * np.sin(np.pi * t) * (dy / dist if dist > 0 else 0)
+            curve_y = y0 + dy * t - offset * np.sin(np.pi * t) * (dx / dist if dist > 0 else 0)
+        
         edge_traces.append(go.Scatter(
-            x=[x0, x1, None],
-            y=[y0, y1, None],
-            line=dict(width=min(G[i][j]['weight']/10000, 8), color='#7f8c8d'),
+            x=curve_x,
+            y=curve_y,
+            mode='lines+markers',
+            line=dict(
+                width=min(fluxo_total / 50000, 6),
+                color=COR_SECUNDARIA,
+                dash='solid'
+            ),
+            marker=dict(
+                size=6,
+                symbol='arrow',
+                angleref='previous'
+            ),
             hoverinfo='text',
-            text=f'{i} para {j}<br>Fluxo total: R$ {G[i][j]["weight"]:,.2f}',
-            mode='lines'
+            text=hover_text,
+            name=f"{source}→{target}"
         ))
     
+    # Criar traço para nós
     node_trace = go.Scatter(
         x=[pos[s][0] for s in setores],
         y=[pos[s][1] for s in setores],
         mode='markers+text',
         text=list(setores),
         textposition='middle center',
-        marker=dict(size=40, color=COR_PRINCIPAL),
-        textfont=dict(color='white', size=16),
+        marker=dict(
+            size=50,
+            color=COR_PRINCIPAL,
+            line=dict(color='white', width=2)
+        ),
+        textfont=dict(color='white', size=20, family='Arial Black'),
         hoverinfo='text',
-        hovertext=[f'Setor {s}' for s in setores]
+        hovertext=[f"Setor {s}" for s in setores],
+        name='Setores'
     )
     
+    # Criar figura
     fig = go.Figure(data=edge_traces + [node_trace])
+    
+    # Atualizar layout
     fig.update_layout(
-        title=f'Grafo de Fluxos - {modo}',
+        title=dict(
+            text=f'Fluxos Direcionados - {modo}',
+            font=dict(size=20, color=COR_PRINCIPAL)
+        ),
         showlegend=False,
         hovermode='closest',
-        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-        height=500,
-        margin=dict(l=20, r=20, t=40, b=20)
+        xaxis=dict(
+            showgrid=False, 
+            zeroline=False, 
+            showticklabels=False,
+            range=[-7, 7]
+        ),
+        yaxis=dict(
+            showgrid=False, 
+            zeroline=False, 
+            showticklabels=False,
+            range=[-7, 7]
+        ),
+        height=600,
+        margin=dict(l=20, r=20, t=60, b=20),
+        plot_bgcolor='white'
     )
     
     return fig
 
-def criar_grafico_comparativo(fluxos_resultado):
-    """Cria gráfico comparativo por período"""
-    fluxos_por_periodo = {t: 0 for t in periodos}
-    for _, row in pd.DataFrame(fluxos_resultado, columns=["De", "Para", "Período", "Fluxo"]).iterrows():
-        fluxos_por_periodo[row['Período']] += row['Fluxo']
+def criar_grafico_sankey(df_fluxos, modo):
+    """Cria diagrama de Sankey para visualizar fluxos"""
+    if df_fluxos.empty:
+        return None
     
-    fig, ax = plt.subplots(figsize=(10, 5))
-    bars = ax.bar(periodos, [fluxos_por_periodo[t] for t in periodos], 
-                  color=COR_SECUNDARIA, alpha=0.8)
+    # Preparar dados para Sankey
+    labels = list(setores)
+    source = []
+    target = []
+    values = []
     
-    # Adicionar valores nas barras
-    for bar in bars:
-        height = bar.get_height()
-        ax.text(bar.get_x() + bar.get_width()/2., height,
-                f'R$ {height:,.0f}',
-                ha='center', va='bottom', fontsize=10)
+    for _, row in df_fluxos.iterrows():
+        source.append(labels.index(row['De']))
+        target.append(labels.index(row['Para']))
+        values.append(row['Fluxo'])
     
-    ax.set_xlabel('Período', fontsize=12)
-    ax.set_ylabel('Volume de Transações (R$)', fontsize=12)
-    ax.set_title('Volume de Transações por Período', fontsize=14, fontweight='bold')
-    ax.grid(True, alpha=0.3)
-    ax.set_xticks(periodos)
+    # Criar figura
+    fig = go.Figure(data=[go.Sankey(
+        node=dict(
+            pad=15,
+            thickness=20,
+            line=dict(color="black", width=0.5),
+            label=labels,
+            color=COR_PRINCIPAL
+        ),
+        link=dict(
+            source=source,
+            target=target,
+            value=values,
+            color=COR_SECUNDARIA
+        )
+    )])
+    
+    fig.update_layout(
+        title=dict(
+            text=f'Diagrama de Fluxo - {modo}',
+            font=dict(size=20, color=COR_PRINCIPAL)
+        ),
+        font=dict(size=12),
+        height=500
+    )
     
     return fig
 
 # Interface principal
-st.markdown('<p class="main-header">Otimização de Fluxo de Caixa</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">Sistema de apoio à decisão para alocação otimizada de recursos financeiros entre setores</p>', 
-            unsafe_allow_html=True)
+st.markdown("""
+<div class="main-header">
+    <h1>Otimização de Fluxo de Caixa</h1>
+    <p>Dashboard para análise e otimização de alocação de recursos entre setores</p>
+</div>
+""", unsafe_allow_html=True)
 
 # Sidebar
 with st.sidebar:
     st.markdown('<div class="sidebar-content">', unsafe_allow_html=True)
-    st.header("Configurações")
+    st.markdown('<p class="sidebar-header">CONFIGURAÇÕES</p>', unsafe_allow_html=True)
     
     # Modo de dados
-    if st.button("Alternar modo de dados"):
-        st.session_state.modo_dados = "Inserir manualmente" if st.session_state.modo_dados == "Gerar aleatoriamente" else "Gerar aleatoriamente"
+    modo_dados = st.radio(
+        "Modo de Entrada de Dados",
+        ["Gerar aleatoriamente", "Inserir manualmente"],
+        horizontal=False
+    )
+    st.session_state.modo_dados = modo_dados
     
-    modo_dados = st.session_state.modo_dados
-    st.write(f"Modo atual: **{modo_dados}**")
+    st.divider()
     
     # Cenários
-    st.subheader("Cenários de Análise")
-    cenario = st.selectbox("Selecione o cenário", ["Padrão", "Otimista", "Pessimista"])
+    st.markdown('<p class="sidebar-header">CENÁRIOS DE ANÁLISE</p>', unsafe_allow_html=True)
+    cenario = st.selectbox(
+        "Selecione o cenário",
+        ["Padrão", "Otimista", "Pessimista"],
+        help="Ajusta os custos conforme o cenário econômico"
+    )
     
     # Fator de ajuste
     if cenario == "Otimista":
         fator_ajuste = 0.8
-        st.info("Cenário otimista: custos 20% menores")
+        st.caption("Cenário otimista: custos 20% menores")
     elif cenario == "Pessimista":
         fator_ajuste = 1.2
-        st.info("Cenário pessimista: custos 20% maiores")
+        st.caption("Cenário pessimista: custos 20% maiores")
     else:
         fator_ajuste = 1.0
-        st.info("Cenário padrão: custos normais")
+        st.caption("Cenário padrão: custos normais")
     
-    # Parâmetros de penalização
-    st.subheader("Parâmetros de Otimização")
-    M = st.number_input("Penalização por erro (M)", value=10.0, min_value=1.0, max_value=100.0)
+    st.divider()
+    
+    # Parâmetros de otimização
+    st.markdown('<p class="sidebar-header">PARÂMETROS DE OTIMIZAÇÃO</p>', unsafe_allow_html=True)
+    M = st.number_input(
+        "Penalização por erro (M)",
+        value=10.0,
+        min_value=1.0,
+        max_value=100.0,
+        step=1.0,
+        help="Valor da penalização aplicada às violações de demanda"
+    )
+    
+    taxa_oportunidade = st.number_input(
+        "Taxa de custo de oportunidade (%)",
+        value=2.0,
+        min_value=0.0,
+        max_value=10.0,
+        step=0.5,
+        help="Custo de manter saldo positivo"
+    ) / 100
+    
+    st.divider()
+    
+    # Botão para mostrar modelagem
+    if st.button("Mostrar Modelagem Matemática", use_container_width=True):
+        st.session_state.mostrar_modelagem = not st.session_state.get('mostrar_modelagem', False)
     
     st.markdown('</div>', unsafe_allow_html=True)
 
-# Inicialização das estruturas de dados
-demandas = {}
-fluxos = []
-
-# Modo de geração aleatória
-if modo_dados == "Gerar aleatoriamente":
-    with st.sidebar:
-        seed = st.number_input("Seed aleatória", min_value=0, value=42)
-        np.random.seed(seed)
-        
-        st.subheader("Parâmetros de Geração")
-        demanda_total = st.number_input("Demanda total por período (R$)", value=400000, step=10000)
-        cap_min = st.number_input("Capacidade mínima (R$)", value=30000, step=1000)
-        cap_max = st.number_input("Capacidade máxima (R$)", value=120000, step=1000)
-        custo_min = st.number_input("Custo unitário mínimo", value=1.0, step=0.1)
-        custo_max = st.number_input("Custo unitário máximo", value=3.0, step=0.1)
-        juros_min = st.number_input("Juros mínimo (%)", value=1.0, step=0.1)
-        juros_max = st.number_input("Juros máximo (%)", value=5.0, step=0.1)
-    
-    for t in periodos:
-        proporcoes = np.random.dirichlet(np.ones(len(setores) - 1), 1).flatten()
-        for idx, s in enumerate([x for x in setores if x != 'A']):
-            demandas[(t, s)] = int(demanda_total * proporcoes[idx])
-        demandas[(t, 'A')] = -sum(demandas[(t, s)] for s in setores if s != 'A')
-    
-    for i in setores:
-        for j in setores:
-            if i != j and i != 'A':  # A não envia fluxos
-                cap = np.random.randint(cap_min, cap_max)
-                custo = np.round(np.random.uniform(custo_min, custo_max), 2)
-                juros = np.round(np.random.uniform(juros_min / 100, juros_max / 100), 4)
-                fluxos.append((i, j, cap, custo * fator_ajuste, juros * fator_ajuste))
-
-# Modo de inserção manual
-else:
-    st.subheader("Inserir dados manualmente")
-    
-    tab_demandas, tab_fluxos = st.tabs(["Demandas", "Fluxos"])
-    
-    with tab_demandas:
-        for t in periodos:
-            st.markdown(f"**Período {t}**")
-            cols = st.columns(len(setores))
-            for idx, s in enumerate(setores):
-                with cols[idx]:
-                    demandas[(t, s)] = st.number_input(f"Setor {s} (P{t})", value=0, step=1000, format="%d")
-    
-    with tab_fluxos:
-        for i in setores:
-            for j in setores:
-                if i != j and i != 'A':
-                    with st.expander(f"Fluxo de {i} para {j}"):
-                        cols = st.columns(3)
-                        with cols[0]:
-                            cap = st.number_input(f"Capacidade {i}->{j}", value=50000, step=1000)
-                        with cols[1]:
-                            custo = st.number_input(f"Custo {i}->{j}", value=2.0, step=0.1, format="%.2f")
-                        with cols[2]:
-                            juros = st.number_input(f"Juros (%) {i}->{j}", value=3.0, step=0.1) / 100
-                        fluxos.append((i, j, cap, custo * fator_ajuste, juros * fator_ajuste))
-
-# Validação dos dados
-erros_validacao, warnings_validacao = validar_dados(demandas, fluxos)
-
-if erros_validacao:
-    st.error("Erros de validação encontrados:")
-    for erro in erros_validacao:
-        st.error(f"• {erro}")
-elif warnings_validacao:
-    st.warning("Avisos:")
-    for warning in warnings_validacao:
-        st.warning(f"• {warning}")
-
-# Exibição dos dados
-st.markdown("---")
-col1, col2 = st.columns(2)
-
-with col1:
-    st.subheader("Demandas por Período e Setor")
-    df_demandas = pd.DataFrame([
-        {'Período': t, 'Setor': s, 'Demanda': demandas[(t, s)]} 
-        for (t, s) in demandas
-    ])
-    st.dataframe(df_demandas, use_container_width=True)
-
-with col2:
-    st.subheader("Fluxos Permitidos")
-    df_fluxos = pd.DataFrame(fluxos, columns=["De", "Para", "Capacidade", "Custo", "Juros"])
-    df_fluxos['Custo'] = df_fluxos['Custo'].round(2)
-    df_fluxos['Juros'] = df_fluxos['Juros'].round(4)
-    st.dataframe(df_fluxos, use_container_width=True)
-
-# Botão de otimização
-st.markdown("---")
-col_btn1, col_btn2, col_btn3 = st.columns([2, 1, 2])
-with col_btn2:
-    botao_otimizar = st.button("Executar Otimização", type="primary", use_container_width=True)
-
-# Botão para mostrar modelagem
-with st.sidebar:
-    if st.button("Mostrar Modelagem Matemática"):
-        st.session_state.mostrar_modelagem = True
-
+# Área principal
 if 'mostrar_modelagem' in st.session_state and st.session_state.mostrar_modelagem:
     with st.expander("Modelagem Matemática", expanded=True):
         st.markdown(r"""
@@ -438,164 +524,288 @@ $$\min \sum_{i,j,t} (c_{ij} + r_{ij})x_{ijt} + \alpha\sum_{s,t} s_{st} + \beta\s
 - $M$: Penalização por violação de demanda
 """)
 
+# Inicialização das estruturas de dados
+demandas = {}
+fluxos = []
+
+# Modo de geração aleatória
+if modo_dados == "Gerar aleatoriamente":
+    st.markdown("### Configuração de Dados Aleatórios")
+    
+    with st.expander("Parâmetros de Geração", expanded=True):
+        col_params1, col_params2, col_params3 = st.columns(3)
+        
+        with col_params1:
+            seed = st.number_input("Seed aleatória", min_value=0, value=42, help="Para reprodutibilidade dos dados")
+            demanda_total = st.number_input("Demanda total por período (R$)", value=400000, step=10000, format="%d")
+        
+        with col_params2:
+            cap_min = st.number_input("Capacidade mínima (R$)", value=30000, step=1000, format="%d")
+            cap_max = st.number_input("Capacidade máxima (R$)", value=120000, step=1000, format="%d")
+        
+        with col_params3:
+            custo_min = st.number_input("Custo unitário mínimo", value=1.0, step=0.1, format="%.2f")
+            custo_max = st.number_input("Custo unitário máximo", value=3.0, step=0.1, format="%.2f")
+        
+        col_params4, col_params5 = st.columns(2)
+        with col_params4:
+            juros_min = st.number_input("Juros mínimo (%)", value=1.0, step=0.1, format="%.2f")
+        with col_params5:
+            juros_max = st.number_input("Juros máximo (%)", value=5.0, step=0.1, format="%.2f")
+    
+    np.random.seed(seed)
+    
+    for t in periodos:
+        proporcoes = np.random.dirichlet(np.ones(len(setores) - 1), 1).flatten()
+        for idx, s in enumerate([x for x in setores if x != 'A']):
+            demandas[(t, s)] = int(demanda_total * proporcoes[idx])
+        demandas[(t, 'A')] = -sum(demandas[(t, s)] for s in setores if s != 'A')
+    
+    for i in setores:
+        for j in setores:
+            if i != j and i != 'A':
+                cap = np.random.randint(cap_min, cap_max)
+                custo = np.round(np.random.uniform(custo_min, custo_max), 2)
+                juros = np.round(np.random.uniform(juros_min / 100, juros_max / 100), 4)
+                fluxos.append((i, j, cap, custo * fator_ajuste, juros * fator_ajuste))
+
+# Modo de inserção manual
+else:
+    st.markdown("### Configuração de Dados Manuais")
+    
+    tab_demandas, tab_fluxos = st.tabs(["Demandas", "Fluxos Permitidos"])
+    
+    with tab_demandas:
+        st.markdown("#### Defina as demandas de cada setor por período")
+        
+        # Criar dataframe editável
+        df_demandas_input = pd.DataFrame(
+            index=setores,
+            columns=[f"Período {t}" for t in periodos]
+        )
+        df_demandas_input.index.name = "Setor"
+        
+        # Preencher com valores existentes ou zeros
+        for s in setores:
+            for t in periodos:
+                df_demandas_input.loc[s, f"Período {t}"] = demandas.get((t, s), 0)
+        
+        # Editor de dados
+        df_demandas_editado = st.data_editor(
+            df_demandas_input,
+            use_container_width=True,
+            num_rows="fixed",
+            hide_index=False,
+            column_config={
+                "Setor": st.column_config.TextColumn("Setor", disabled=True),
+                **{f"Período {t}": st.column_config.NumberColumn(
+                    f"Período {t}",
+                    min_value=-1000000,
+                    max_value=1000000,
+                    step=1000,
+                    format="R$ %d"
+                ) for t in periodos}
+            }
+        )
+        
+        # Atualizar demandas
+        for s in setores:
+            for t in periodos:
+                demandas[(t, s)] = float(df_demandas_editado.loc[s, f"Período {t}"])
+        
+        st.info("Nota: O Setor A deve ter demanda negativa (fornecedor) e os demais setores demanda positiva (consumidores).")
+    
+    with tab_fluxos:
+        st.markdown("#### Defina os fluxos permitidos entre setores")
+        
+        # Criar dataframe editável
+        df_fluxos_input = pd.DataFrame(
+            index=range(len(setores) * (len(setores) - 1)),
+            columns=["De", "Para", "Capacidade", "Custo", "Juros (%)"]
+        )
+        
+        # Preencher com fluxos existentes ou valores padrão
+        idx = 0
+        for i in setores:
+            for j in setores:
+                if i != j and i != 'A':
+                    df_fluxos_input.loc[idx, "De"] = i
+                    df_fluxos_input.loc[idx, "Para"] = j
+                    df_fluxos_input.loc[idx, "Capacidade"] = 50000
+                    df_fluxos_input.loc[idx, "Custo"] = 2.0
+                    df_fluxos_input.loc[idx, "Juros (%)"] = 3.0
+                    idx += 1
+        
+        # Remover linhas vazias
+        df_fluxos_input = df_fluxos_input.dropna()
+        
+        # Editor de dados
+        df_fluxos_editado = st.data_editor(
+            df_fluxos_input,
+            use_container_width=True,
+            num_rows="dynamic",
+            hide_index=True,
+            column_config={
+                "De": st.column_config.SelectboxColumn("De", options=setores),
+                "Para": st.column_config.SelectboxColumn("Para", options=setores),
+                "Capacidade": st.column_config.NumberColumn(
+                    "Capacidade",
+                    min_value=0,
+                    step=1000,
+                    format="R$ %d"
+                ),
+                "Custo": st.column_config.NumberColumn(
+                    "Custo",
+                    min_value=0.0,
+                    step=0.1,
+                    format="%.2f"
+                ),
+                "Juros (%)": st.column_config.NumberColumn(
+                    "Juros (%)",
+                    min_value=0.0,
+                    step=0.1,
+                    format="%.2f"
+                )
+            }
+        )
+        
+        # Atualizar fluxos
+        fluxos = []
+        for _, row in df_fluxos_editado.iterrows():
+            if pd.notna(row["De"]) and pd.notna(row["Para"]):
+                if row["De"] != row["Para"] and row["De"] != 'A':
+                    fluxos.append((
+                        row["De"],
+                        row["Para"],
+                        float(row["Capacidade"]),
+                        float(row["Custo"]) * fator_ajuste,
+                        float(row["Juros (%)"]) / 100 * fator_ajuste
+                    ))
+
+# Validação dos dados
+erros_validacao, warnings_validacao = validar_dados(demandas, fluxos)
+
+if erros_validacao:
+    st.error("Erros de validação encontrados:")
+    for erro in erros_validacao:
+        st.error(f"• {erro}")
+elif warnings_validacao:
+    st.warning("Avisos:")
+    for warning in warnings_validacao:
+        st.warning(f"• {warning}")
+
+# Dashboard de visualização de dados
+st.markdown("---")
+st.markdown('<p class="section-header">Dados de Entrada</p>', unsafe_allow_html=True)
+
+# Métricas resumidas
+col_metric1, col_metric2, col_metric3, col_metric4 = st.columns(4)
+
+with col_metric1:
+    st.markdown("""
+    <div class="metric-card">
+        <div class="metric-label">Demanda Total</div>
+        <div class="metric-value">R$ {:.0f}</div>
+    </div>
+    """.format(sum(max(0, demandas[(t, s)]) for t in periodos for s in setores)), unsafe_allow_html=True)
+
+with col_metric2:
+    st.markdown("""
+    <div class="metric-card">
+        <div class="metric-label">Capacidade Total</div>
+        <div class="metric-value">R$ {:.0f}</div>
+    </div>
+    """.format(sum(cap for (_, _, cap, _, _) in fluxos)), unsafe_allow_html=True)
+
+with col_metric3:
+    st.markdown("""
+    <div class="metric-card">
+        <div class="metric-label">Fluxos Configurados</div>
+        <div class="metric-value">{}</div>
+    </div>
+    """.format(len(fluxos)), unsafe_allow_html=True)
+
+with col_metric4:
+    st.markdown("""
+    <div class="metric-card">
+        <div class="metric-label">Cenário</div>
+        <div class="metric-value">{}</div>
+    </div>
+    """.format(cenario), unsafe_allow_html=True)
+
+# Visualização dos dados de entrada
+col1, col2 = st.columns(2)
+
+with col1:
+    st.subheader("Demandas por Período e Setor")
+    df_demandas = pd.DataFrame([
+        {'Período': t, 'Setor': s, 'Demanda': demandas[(t, s)]} 
+        for (t, s) in demandas
+    ])
+    
+    # Pivot table para melhor visualização
+    pivot_demandas = df_demandas.pivot(index='Setor', columns='Período', values='Demanda')
+    pivot_demandas.columns = [f'P{t}' for t in periodos]
+    pivot_demandas['Total'] = pivot_demandas.sum(axis=1)
+    
+    st.dataframe(pivot_demandas, use_container_width=True)
+
+with col2:
+    st.subheader("Fluxos Permitidos")
+    df_fluxos = pd.DataFrame(fluxos, columns=["De", "Para", "Capacidade", "Custo", "Juros"])
+    df_fluxos['Custo'] = df_fluxos['Custo'].round(2)
+    df_fluxos['Juros'] = (df_fluxos['Juros'] * 100).round(2)
+    df_fluxos['Juros'] = df_fluxos['Juros'].astype(str) + '%'
+    
+    st.dataframe(df_fluxos, use_container_width=True)
+
+# Botão de otimização
+st.markdown("---")
+col_btn1, col_btn2, col_btn3 = st.columns([2, 1, 2])
+with col_btn2:
+    botao_otimizar = st.button("Executar Otimização", type="primary", use_container_width=True)
+
 if botao_otimizar:
     if not fluxos:
         st.error("Nenhum fluxo definido. Configure os fluxos permitidos antes de otimizar.")
     else:
         resultados = {}
-        for modo in ["Sem relaxamento", "Com relaxamento"]:
-            st.markdown(f"## Resultados - {modo}")
-            
-            with st.spinner(f"Resolvendo problema {modo}..."):
-                prob = criar_modelo_otimizacao(demandas, fluxos, modo, M)
-                
-                # Extrair resultados
-                fluxos_resultado, erros_resultado, saldos_resultado = extrair_resultados(prob, modo)
-                
-                # Armazenar resultados
-                resultados[modo] = {
-                    'status': LpStatus[prob.status],
-                    'custo_total': value(prob.objective),
-                    'fluxos': fluxos_resultado,
-                    'erros': erros_resultado,
-                    'saldos': saldos_resultado
-                }
-                
-                # Exibir métricas principais
-                col1, col2, col3 = st.columns(3)
-                
-                with col1:
-                    st.metric("Status", LpStatus[prob.status])
-                
-                with col2:
-                    st.metric("Custo Total", f"R$ {value(prob.objective):,.2f}")
-                
-                with col3:
-                    total_fluxo = sum(f[3] for f in fluxos_resultado)
-                    st.metric("Volume Total Transacionado", f"R$ {total_fluxo:,.2f}")
-                
-                # Análise de sensibilidade
-                if fluxos_resultado:
-                    st.markdown("### Análise de Utilização de Capacidade")
-                    df_fluxos_resultado = pd.DataFrame(fluxos_resultado, 
-                                                       columns=["De", "Para", "Período", "Fluxo"])
-                    
-                    # Calcular utilização
-                    utilizacao_data = []
-                    for (i, j, cap, _, _) in fluxos:
-                        fluxo_total = df_fluxos_resultado[
-                            (df_fluxos_resultado['De'] == i) & 
-                            (df_fluxos_resultado['Para'] == j)
-                        ]['Fluxo'].sum()
-                        utilizacao = (fluxo_total / (cap * len(periodos))) * 100
-                        utilizacao_data.append({
-                            'De': i, 'Para': j,
-                            'Capacidade': cap,
-                            'Fluxo Total': fluxo_total,
-                            'Utilização (%)': round(utilizacao, 1)
-                        })
-                    
-                    df_utilizacao = pd.DataFrame(utilizacao_data)
-                    df_utilizacao = df_utilizacao[df_utilizacao['Fluxo Total'] > 0]
-                    
-                    if not df_utilizacao.empty:
-                        st.dataframe(df_utilizacao, use_container_width=True)
-                        
-                        # Gráfico de utilização
-                        fig_utilizacao, ax_utilizacao = plt.subplots(figsize=(10, 5))
-                        bars = ax_utilizacao.bar(
-                            [f"{row['De']}->{row['Para']}" for _, row in df_utilizacao.iterrows()],
-                            df_utilizacao['Utilização (%)'],
-                            color=COR_SECUNDARIA, alpha=0.8
-                        )
-                        ax_utilizacao.axhline(y=100, color='red', linestyle='--', alpha=0.7, label='Capacidade máxima')
-                        ax_utilizacao.axhline(y=80, color='orange', linestyle='--', alpha=0.7, label='Alta utilização')
-                        ax_utilizacao.set_xlabel('Fluxos', fontsize=12)
-                        ax_utilizacao.set_ylabel('Utilização (%)', fontsize=12)
-                        ax_utilizacao.set_title('Utilização de Capacidade por Fluxo', fontsize=14, fontweight='bold')
-                        ax_utilizacao.legend()
-                        ax_utilizacao.grid(True, alpha=0.3)
-                        plt.xticks(rotation=45)
-                        st.pyplot(fig_utilizacao)
-                
-                # Exibir fluxos
-                st.markdown("### Fluxos Otimizados")
-                if fluxos_resultado:
-                    df_fluxos_resultado = pd.DataFrame(fluxos_resultado, 
-                                                       columns=["De", "Para", "Período", "Fluxo"])
-                    df_fluxos_resultado['Fluxo'] = df_fluxos_resultado['Fluxo'].round(2)
-                    st.dataframe(df_fluxos_resultado, use_container_width=True)
-                else:
-                    st.info("Nenhum fluxo otimizado encontrado.")
-                
-                # Exibir erros
-                if erros_resultado:
-                    st.markdown("### Demandas Não Atendidas")
-                    df_erros = pd.DataFrame(erros_resultado, 
-                                           columns=["Setor", "Período", "Erro", "Tipo"])
-                    st.dataframe(df_erros, use_container_width=True)
-                
-                # Exibir saldos
-                if saldos_resultado:
-                    st.markdown("### Saldos por Setor e Período")
-                    df_saldos = pd.DataFrame(saldos_resultado, 
-                                            columns=["Setor", "Período", "Saldo"])
-                    df_saldos['Saldo'] = df_saldos['Saldo'].round(2)
-                    
-                    # Pivot table
-                    pivot_saldos = df_saldos.pivot(index='Setor', columns='Período', values='Saldo')
-                    st.dataframe(pivot_saldos, use_container_width=True)
-                
-                # Gráficos comparativos
-                if fluxos_resultado:
-                    st.markdown("### Análise Temporal")
-                    fig_comparativo = criar_grafico_comparativo(fluxos_resultado)
-                    st.pyplot(fig_comparativo)
-                
-                # Grafo interativo
-                if fluxos_resultado:
-                    st.markdown("### Visualização de Rede")
-                    fig_grafo = criar_grafo_interativo(pd.DataFrame(fluxos_resultado, 
-                                                                   columns=["De", "Para", "Período", "Fluxo"]), 
-                                                      modo)
-                    st.plotly_chart(fig_grafo, use_container_width=True)
-            
-            st.markdown("---")
         
-        # Comparação entre modos
-        if len(resultados) == 2:
-            st.markdown("## Comparação entre Modos")
-            
-            col1, col2 = st.columns(2)
-            
-            for idx, (modo, res) in enumerate(resultados.items()):
-                with (col1 if idx == 0 else col2):
-                    st.markdown(f"### {modo}")
-                    st.markdown(f"**Status:** {res['status']}")
-                    st.markdown(f"**Custo Total:** R$ {res['custo_total']:,.2f}")
-                    st.markdown(f"**Número de Fluxos:** {len(res['fluxos'])}")
-                    st.markdown(f"**Erros:** {len(res['erros'])}")
-            
-            # Gráfico comparativo de custos
-            fig_comparacao, ax_comparacao = plt.subplots(figsize=(8, 5))
-            custos = [res['custo_total'] for res in resultados.values()]
-            modos = list(resultados.keys())
-            bars = ax_comparacao.bar(modos, custos, color=[COR_PRINCIPAL, COR_SECUNDARIA], alpha=0.8)
-            
-            for bar in bars:
-                height = bar.get_height()
-                ax_comparacao.text(bar.get_x() + bar.get_width()/2., height,
-                                  f'R$ {height:,.2f}',
-                                  ha='center', va='bottom', fontsize=10)
-            
-            ax_comparacao.set_ylabel('Custo Total (R$)', fontsize=12)
-            ax_comparacao.set_title('Comparação de Custos entre Modos', fontsize=14, fontweight='bold')
-            ax_comparacao.grid(True, alpha=0.3)
-            st.pyplot(fig_comparacao)
-
-# Footer
-st.markdown("---")
-st.markdown(
-    "<p style='text-align: center; color: #666;'>Desenvolvido para a disciplina MS529 - Otimização de Fluxo de Caixa</p>",
-    unsafe_allow_html=True
-)
+        # Criar tabs para resultados
+        tabs_resultados = st.tabs(["Sem Relaxamento", "Com Relaxamento", "Comparativo"])
+        
+        for idx, modo in enumerate(["Sem relaxamento", "Com relaxamento"]):
+            with tabs_resultados[idx]:
+                with st.spinner(f"Resolvendo problema {modo}..."):
+                    prob = criar_modelo_otimizacao(demandas, fluxos, modo, M)
+                    
+                    # Extrair resultados
+                    fluxos_resultado, erros_resultado, saldos_resultado = extrair_resultados(prob, modo)
+                    
+                    # Armazenar resultados
+                    resultados[modo] = {
+                        'status': LpStatus[prob.status],
+                        'custo_total': value(prob.objective),
+                        'fluxos': fluxos_resultado,
+                        'erros': erros_resultado,
+                        'saldos': saldos_resultado
+                    }
+                    
+                    # Dashboard de métricas
+                    col1, col2, col3, col4 = st.columns(4)
+                    
+                    with col1:
+                        st.markdown("""
+                        <div class="metric-card">
+                            <div class="metric-label">Status</div>
+                            <div class="metric-value">{}</div>
+                        </div>
+                        """.format(LpStatus[prob.status]), unsafe_allow_html=True)
+                    
+                    with col2:
+                        st.markdown("""
+                        <div class="metric-card">
+                            <div class="metric-label">Custo Total</div>
+                            <div class="metric-value">R$ {:.0f}</div>
+                        </div>
+                        """.format(value(prob.objective)), unsafe_allow_html=True)
