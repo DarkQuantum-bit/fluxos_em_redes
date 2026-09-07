@@ -623,8 +623,25 @@ if botao_otimizar:
                         st.markdown("### Saldos por Setor e Período")
                         df_saldos = pd.DataFrame(saldos_resultado, 
                                                 columns=["Setor", "Período", "Saldo"])
-                        pivot_saldos = df_saldos.pivot(index='Setor', columns='Período', values='Saldo')
-                        pivot_saldos.columns = [f'P{t}' for t in periodos]
+                        
+                        # Criar pivot table garantindo todos os períodos
+                        pivot_saldos = df_saldos.pivot_table(
+                            index='Setor', 
+                            columns='Período', 
+                            values='Saldo',
+                            fill_value=0,
+                            aggfunc='sum'
+                        )
+                        
+                        # Garantir que todas as colunas de período existam
+                        for t in periodos:
+                            if t not in pivot_saldos.columns:
+                                pivot_saldos[t] = 0
+                        
+                        # Ordenar colunas
+                        pivot_saldos = pivot_saldos[sorted(pivot_saldos.columns)]
+                        pivot_saldos.columns = [f'P{t}' for t in pivot_saldos.columns]
+                        
                         st.dataframe(pivot_saldos, use_container_width=True)
         
         # Tab comparativo
