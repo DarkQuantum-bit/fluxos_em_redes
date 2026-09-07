@@ -87,7 +87,7 @@ def validar_dados(demandas, fluxos):
     
     return erros, warnings
 
-def criar_modelo_otimizacao(demandas, fluxos, modo, M=10.0):
+def criar_modelo_otimizacao(demandas, fluxos, modo, M=10000.0):
     """Cria e resolve o modelo de otimização"""
     prob = LpProblem(f"Fluxo_Caixa_{modo}", LpMinimize)
     
@@ -101,30 +101,18 @@ def criar_modelo_otimizacao(demandas, fluxos, modo, M=10.0):
         erro_pos = LpVariable.dicts("erro_pos", ((s, t) for s in setores for t in periodos), lowBound=0)
         erro_neg = LpVariable.dicts("erro_neg", ((s, t) for s in setores for t in periodos), lowBound=0)
     
-    # Calcular custo máximo possível de fluxo
-    custo_max_fluxo = max(custo + juros for (_, _, _, custo, juros) in fluxos) if fluxos else 1.0
-    taxa_oportunidade = 0.01
-    taxa_juros_deficit = 0.03
-    
-    # M efetivo deve ser maior que o custo máximo de fluxo
-    M_efetivo = max(M, custo_max_fluxo * 10)  # Pelo menos 10x o custo máximo
-    
-    # Função objetivo
+    # Função objetivo - APENAS custo de fluxo (sem custo de oportunidade)
     custo_total = lpSum((custo + juros) * x[i, j, t] 
                         for (i, j, _, custo, juros) in fluxos 
                         for t in periodos)
     
-    custo_oportunidade = lpSum(taxa_oportunidade * saldo[s, t] 
-                               for s in setores 
-                               for t in periodos)
-    
-    custo_juros = lpSum(taxa_juros_deficit * deficit[s, t] 
-                        for s in setores 
-                        for t in periodos)
-    
-    prob += custo_total + custo_oportunidade + custo_juros
+    prob += custo_total
     
     if modo == "Com relaxamento":
+        # Penalidade ALTA para garantir que fluxos sejam usados
+        # M deve ser muito maior que qualquer custo de fluxo possível
+        M_efetivo = max(M, 10000.0)  # Garantir penalização muito alta
+        
         penalidade = lpSum(M_efetivo * (erro_pos[s, t] + erro_neg[s, t])
                           for s in setores 
                           for t in periodos)
@@ -343,12 +331,12 @@ with st.sidebar:
     st.subheader("Parâmetros de Otimização")
     M = st.number_input(
         "Penalização por erro (M)",
-        value=100.0,
-        min_value=10.0,
-        max_value=1000.0,
-        step=10.0,
+        value=10000.0,
+        min_value=1000.0,
+        max_value=100000.0,
+        step=1000.0,
         key="parametro_M",
-        help="Valor da penalização para violações de demanda. Deve ser maior que os custos de fluxo."
+        help="Valor da penalização para violações de demanda. Deve ser muito maior que os custos de fluxo."
     )
     
     st.divider()
@@ -370,7 +358,7 @@ if st.session_state.mostrar_modelagem:
 - $e^+_{st}, e^-_{st} \geq 0$: Violações de demanda (modo relaxado)
 
 **Função Objetivo:**
-$$\min \sum_{i,j,t} (c_{ij} + r_{ij})x_{ijt} + \alpha\sum_{s,t} s_{st} + \beta\sum_{s,t} d_{st} + M\sum_{s,t}(e^+_{st} + e^-_{st})$$
+$$\min \sum_{i,j,t} (c_{ij} + r_{ij})x_{ijt} + M\sum_{s,t}(e^+_{st} + e^-_{st})$$
 
 **Sujeito a:**
 1. **Capacidade:** $x_{ijt} \leq cap_{ij}, \forall i,j,t$
